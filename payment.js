@@ -19,6 +19,7 @@ function formatDateIL(dateString) {
   };
 }
 
+// משיכת כל המשתנים מאותו סוג לפי סדר
 function getAllParams(params, prefix) {
   let arr = [];
   let i = 1;
@@ -29,6 +30,7 @@ function getAllParams(params, prefix) {
   return arr;
 }
 
+// אלגוריתם Luhn לבדיקת תקינות ספרות כרטיס אשראי
 function isValidLuhn(ccNum) {
   if (!ccNum || ccNum.length < 8 || ccNum.length > 19 || !/^\d+$/.test(ccNum)) return false;
   let sum = 0;
@@ -44,6 +46,7 @@ function isValidLuhn(ccNum) {
   return (sum % 10) === 0;
 }
 
+// בדיקת תקינות תוקף האשראי
 function isValidExp(exp) {
   if (!exp || exp.length !== 4 || !/^\d+$/.test(exp)) return false;
   const month = parseInt(exp.substring(0, 2), 10);
@@ -113,11 +116,11 @@ export async function processIvrFlow(clientData, params, token, env) {
 
   if (selectedMenu === '1') {
     paymentItemType = 2; // פעימות
-    let peimaAcceptances = peima_steps.filter(v => v === '1').length;
-    let peimaBacks = peima_steps.filter(v => v === '*').length;
     
-    if (peimaBacks > peimaAcceptances) return "&"; // ביטול סכום
+    // התיקון העמוק: אם הוקש כוכבית בסכום, תמיד נצא לאיפוס השלוחה
+    if (peima_steps.includes('*')) return "&"; 
 
+    let peimaAcceptances = peima_steps.filter(v => v === '1').length;
     isAmountAccepted = peimaAcceptances > amountCancels;
 
     const groupRes = await fetch(`${BASE_URL}/Group`, {
@@ -157,12 +160,12 @@ export async function processIvrFlow(clientData, params, token, env) {
     finalAmountAgorot = currentPeimaAmountShekels * 100;
 
   } else if (selectedMenu === '2') {
-    paymentItemType = 1; // חידוש
-    let subAcceptances = sub_confirms.filter(v => v === '1').length;
-    let subBacks = sub_confirms.filter(v => v === '*').length;
+    paymentItemType = 1; // חידוש חודשי
     
-    if (subBacks > subAcceptances) return "&"; // ביטול סכום
+    // התיקון העמוק גם כאן
+    if (sub_confirms.includes('*')) return "&"; 
 
+    let subAcceptances = sub_confirms.filter(v => v === '1').length;
     isAmountAccepted = subAcceptances > amountCancels;
 
     const subRes = await fetch(`${BASE_URL}/GetRenewSubscriptionStartAndEndDatesAndPrice/${actualClientId}`, {
