@@ -16,12 +16,14 @@ function formatDateIL(dateString) {
 }
 
 export async function processIvrFlow(clientData, params, token, env) {
-  const { menu_choice, pay_amount, cc_number, cc_exp, cc_cvv } = params;
+  const { main_menu, cc_number, cc_exp, cc_cvv } = params;
   const actualClubId = clientData.clubId;
   const actualClientId = clientData.id;
 
-  // שלב 0: הצגת נתונים ובחירת תפריט
-  if (!menu_choice) {
+  // ------------------------------------------------------------------
+  // שלב 0: הקראת נתונים ובחירת תפריט ראשי
+  // ------------------------------------------------------------------
+  if (!main_menu) {
     const balanceInShekels = (clientData.lastBalance || 0) / 100; 
     let subEndParts = [`t-לא נמצא תוקף למנוי במערכת`];
     
@@ -36,45 +38,141 @@ export async function processIvrFlow(clientData, params, token, env) {
       `t-שלום`, `t-${cleanText(`${clientData.firstName} ${clientData.lastName}`)}`,
       `t-היתרה המעודכנת שלך היא`, `n-${balanceInShekels}`, `t-שקלים`,
       ...subEndParts, ...licExpParts,
-      `t-למעבר לתפריט הטענת יתרה הקישו 1`
+      `t-לטעינת פעימות הקישו 1.t-לחידוש מנוי חודשי הקישו 2`
     ];
 
-    return `read=${ttsParts.join(".")}=menu_choice,,1,,,NO,,,,1,,,,,no`;
+    return `read=${ttsParts.join(".")}=main_menu,,1,,,NO,,,,1,,,,,no`;
   }
 
-  // שלבים 1 עד 5: איסוף פרטי הטענה
-  if (menu_choice === "1") {
-    if (!pay_amount) return `read=t-נא להקיש את הסכום להטענה בשקלים, ובסיום סולמית=pay_amount,,4,2,,Number`;
+  // ------------------------------------------------------------------
+  // שלב 1: טעינת פעימות (הוספה והפחתה דינמית)
+  // ------------------------------------------------------------------
+  if (main_menu === "1") {
+    // משיכת חוקי ההטענה של הקבוצה
+    const groupRes = await fetch(`${BASE_URL}/Group`, {
+      method: 'GET',
+      headers: { "Authorization": `Bearer ${token}`, "clubExternalId": params.club }
+    });
+    const groupsRaw = await groupRes.json();
+    const groups = Array.isArray(groupsRaw) ? groupsRaw : (groupsRaw.data || []);
+    const clientGroup = groups.find(g => g.id === clientData.groupId) || {};
+    
+    const minAmountAgorot = clientGroup.minimumAmountToCharge != null ? clientGroup.minimumAmountToCharge : 3000;
+    const stepAmountAgorot = clientGroup.stepAmountToCharge != null ? clientGroup.stepAmountToCharge : 600;
+    
+    const minAmount = minAmountAgorot / 100;
+    const stepAmount = stepAmountAgorot / 100;
+
+    let currentAmount = minAmount;
+    let isAccepted = false;
+    let stepIndex = 1;
+
+    // חישוב הסכום הדינמי על פי משתני העבר (ללא בקשת אותו משתנה פעמיים!)
+    while (true) {
+      const stepVal = params[`peima_step_${stepIndex}`];
+      if (!stepVal) break; // הגענו לשלב שעוד לא נשאל
+      
+      if (stepVal === '1') {
+        isAccepted = true; // הלקוח אישר את הסכום
+        break;
+      } else if (stepVal === '2') {
+        currentAmount += stepAmount;
+      } else if (stepVal === '3') {
+        currentAmount -= stepAmount;
+        if (currentAmount < minAmount) currentAmount = minAmount; // לא נותן לרדת מהמינימום
+      }
+      stepIndex++;
+    }
+
+    // אם הלקוח טרם אישר סופית, מבקשים את המשתנה הבא בתור
+    if (!isAccepted) {
+      return `read=t-הסכום לתשלום הוא.n-${currentAmount}.t-שקלים.t-לאישור ומעבר לתשלום הקישו 1.t-להוספת.n-${stepAmount}.t-שקלים הקישו 2.t-להפחתת.n-${stepAmount}.t-שקלים הקישו 3=peima_step_${stepIndex},,1,,,NO,,,,,,,,,no`;
+    }
+
+    // אם אושר - עוברים לגביית אשראי
     if (!cc_number) return `read=m-1422=cc_number,,16,,,NO,,,,,,,,,no`;
     if (!cc_exp) return `read=m-1424=cc_exp,,4,,,NO,,,,,,,,,no`;
     if (!cc_cvv) return `read=m-1428=cc_cvv,,4,,,NO,,,,,,,,,no`;
 
-    // ביצוע פעולת התשלום
-    const amountAgorot = parseInt(pay_amount, 10) * 100;
+    const finalAmountAgorot = currentAmount * 100;
     const paymentPayload = {
-      payments: [{ clientId: actualClientId, clubId: actualClubId, amount: amountAgorot, paymentType: 1, creditCardNumber: cc_number, expDate: cc_exp, cvv: cc_cvv, personalId: "" }],
-      purchaseItems: [{ transactionType: 1, itemType: 2, clientId: actualClientId, clubId: actualClubId, moneyValue: amountAgorot, price: amountAgorot, qty: 1, totalPrice: amountAgorot }],
-      IsAdminUser: true, clientId: actualClientId, clubId: actualClubId, amount: amountAgorot
+      payments: [{ clientId: actualClientId, clubId: actualClubId, amount: finalAmountAgorot, paymentType: 1, creditCardNumber: cc_number, expDate: cc_exp, cvv: cc_cvv, personalId: "" }],
+      purchaseItems: [{ transactionType: 1, itemType: 2, clientId: actualClientId, clubId: actualClubId, moneyValue: finalAmountAgorot, price: finalAmountAgorot, qty: 1, totalPrice: finalAmountAgorot }],
+      IsAdminUser: true, clientId: actualClientId, clubId: actualClubId, amount: finalAmountAgorot
     };
 
-    const payReq = await fetch(`${BASE_URL}/Client/AdminPurchase`, {
+    return await executePayment(paymentPayload, finalAmountAgorot, "פעימות", params, actualClientId, token, env);
+  }
+
+  // ------------------------------------------------------------------
+  // שלב 2: חידוש מנוי חודשי
+  // ------------------------------------------------------------------
+  if (main_menu === "2") {
+    // משיכת פרטי חידוש מנוי
+    const subRes = await fetch(`${BASE_URL}/GetRenewSubscriptionStartAndEndDatesAndPrice/${actualClientId}`, {
       method: 'POST',
       headers: { "Authorization": `Bearer ${token}`, "clubExternalId": params.club, "Content-Type": "application/json" },
-      body: JSON.stringify(paymentPayload)
+      body: JSON.stringify({})
     });
 
-    const payRes = await payReq.json();
-    
-    // כתיבה לטבלת הלוגים ב-D1
-    const logMsg = payRes.isSuccess ? "הצלחה" : (payRes.message || "שגיאה בחיוב");
-    await env.DB.prepare("INSERT INTO charge_logs (club_id, client_id, amount, status, response_msg) VALUES (?, ?, ?, ?, ?)")
-      .bind(params.club, actualClientId, pay_amount, payRes.isSuccess ? 'SUCCESS' : 'FAILED', logMsg)
-      .run();
+    if (!subRes.ok) return `id_list_message=t-שגיאה בשליפת נתוני המנוי`;
+    const subData = await subRes.json();
 
-    if (payRes.isSuccess) {
-      return `id_list_message=t-בוצע בהצלחה הטענה על סך.n-${pay_amount}.t-שקלים`;
-    } else {
-      return `id_list_message=t-התשלום נכשל`;
+    const priceAgorot = subData.price || 0;
+    const priceShekels = priceAgorot / 100;
+    const fromDate = formatDateIL(subData.fromDate);
+    const toDate = formatDateIL(subData.toDate);
+
+    if (!params.sub_confirm) {
+      return `read=t-לחידוש מנוי מ.dateH-${fromDate ? fromDate.formatted : ""}.t-עד.dateH-${toDate ? toDate.formatted : ""}.t-בסך.n-${priceShekels}.t-שקלים.t-לאישור ומעבר לתשלום הקישו 1=sub_confirm,,1,,,NO,,,,,,,,,no`;
     }
+
+    if (params.sub_confirm !== '1') {
+       return `id_list_message=t-הפעולה בוטלה`;
+    }
+
+    // אם אושר - עוברים לגביית אשראי
+    if (!cc_number) return `read=m-1422=cc_number,,16,,,NO,,,,,,,,,no`;
+    if (!cc_exp) return `read=m-1424=cc_exp,,4,,,NO,,,,,,,,,no`;
+    if (!cc_cvv) return `read=m-1428=cc_cvv,,4,,,NO,,,,,,,,,no`;
+
+    const paymentPayload = {
+      payments: [{ clientId: actualClientId, clubId: actualClubId, amount: priceAgorot, paymentType: 1, creditCardNumber: cc_number, expDate: cc_exp, cvv: cc_cvv, personalId: "" }],
+      purchaseItems: [{ transactionType: 1, itemType: 1, clientId: actualClientId, clubId: actualClubId, startDate: subData.fromDate, endDate: subData.toDate, price: priceAgorot, qty: 1, totalPrice: priceAgorot }],
+      IsAdminUser: true, clientId: actualClientId, clubId: actualClubId, amount: priceAgorot
+    };
+
+    return await executePayment(paymentPayload, priceAgorot, "מנוי חודשי", params, actualClientId, token, env);
+  }
+
+  // במקרה של בחירה שגויה בתפריט הראשי
+  return `id_list_message=t-בחירה שגויה`;
+}
+
+// ------------------------------------------------------------------
+// פונקציית עזר: ביצוע התשלום מול ה-API ושמירת הלוגים
+// ------------------------------------------------------------------
+async function executePayment(paymentPayload, amountAgorot, actionName, params, actualClientId, token, env) {
+  const amountShekels = amountAgorot / 100;
+  
+  const payReq = await fetch(`${BASE_URL}/Client/AdminPurchase`, {
+    method: 'POST',
+    headers: { "Authorization": `Bearer ${token}`, "clubExternalId": params.club, "Content-Type": "application/json" },
+    body: JSON.stringify(paymentPayload)
+  });
+
+  const payRes = await payReq.json();
+  
+  // כתיבה לטבלת הלוגים ב-D1
+  const logMsg = payRes.isSuccess ? "הצלחה" : (payRes.message || "שגיאה בחיוב");
+  await env.DB.prepare("INSERT INTO charge_logs (club_id, client_id, amount, status, response_msg) VALUES (?, ?, ?, ?, ?)")
+    .bind(params.club, actualClientId, amountShekels, payRes.isSuccess ? 'SUCCESS' : 'FAILED', logMsg)
+    .run();
+
+  // הודעת סיום למערכת (ללא בקשת משתנה נוסף כדי שהמערכת תעבור ל-go_to הבא)
+  if (payRes.isSuccess) {
+    return `id_list_message=t-בוצע בהצלחה תשלום.t-עבור.${actionName}.t-על סך.n-${amountShekels}.t-שקלים`;
+  } else {
+    return `id_list_message=t-התשלום נכשל`;
   }
 }
