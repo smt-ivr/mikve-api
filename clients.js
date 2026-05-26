@@ -50,7 +50,7 @@ export async function getActiveClient(params, token) {
       matches.forEach((c, idx) => {
         ttsParts.push(`t-ללקוח`, `t-${cleanText(c.firstName)} ${cleanText(c.lastName)}`, `t-הקישו`, `n-${idx + 1}`);
       });
-      return { yemotResponse: `read=${ttsParts.join(".")}=client_index,,${String(matches.length).length},,,NO,,,,` };
+      return { yemotResponse: `read=${ttsParts.join(".")}=client_index,,${String(matches.length).length},,,NO,,,,,,,,,no` };
     } else {
       const chosenIndex = parseInt(params.client_index) - 1;
       if (chosenIndex >= 0 && chosenIndex < matches.length) {
