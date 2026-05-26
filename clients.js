@@ -35,7 +35,7 @@ export async function getActiveClient(params, token) {
 
   if (matches.length === 0) {
     if (cleanClientIdNum) {
-      return { yemotResponse: `id_list_message=t-תעודת הזהות לא נמצאה&` };
+      return { yemotResponse: `id_list_message=t-תעודת הזהות לא נמצאה` };
     }
     return { yemotResponse: `read=t-לא זיהינו את מספר הטלפון שלך במערכת.t-נא להקיש את מספר תעודת הזהות שלכם, ובסיום סולמית=client_id,,10,,,NO,,,,,,,,,no` };
   }
@@ -56,7 +56,7 @@ export async function getActiveClient(params, token) {
       if (chosenIndex >= 0 && chosenIndex < matches.length) {
         selectedClient = matches[chosenIndex];
       } else {
-        return { yemotResponse: `id_list_message=t-בחירה שגויה&` };
+        return { yemotResponse: `id_list_message=t-בחירה שגויה` };
       }
     }
   }
