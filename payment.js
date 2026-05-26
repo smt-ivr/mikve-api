@@ -124,7 +124,7 @@ export async function processIvrFlow(clientData, params, token, env) {
     const toDate = formatDateIL(subData.toDate);
 
     if (!params.sub_confirm) {
-      return `read=t-לחידוש מנוי מ.dateH-${fromDate ? fromDate.formatted : ""}.t-עד.dateH-${toDate ? toDate.formatted : ""}.t-בסך.n-${priceShekels}.t-שקלים.t-לאישור ומעבר לתשלום הקישו 1=sub_confirm,,1,,,NO,,,,,,,,,no`;
+      return `read=t-חידוש מנוי מתאריך.dateH-${fromDate ? fromDate.formatted : ""}.t-עד תאריך.dateH-${toDate ? toDate.formatted : ""}.t-בסך.n-${priceShekels}.t-שקלים.t-לאישור ומעבר לתשלום הקישו 1=sub_confirm,,1,,,NO,,,,,,,,,no`;
     }
 
     if (params.sub_confirm !== '1') {
