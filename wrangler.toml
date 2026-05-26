@@ -1,12 +1,6 @@
 name = "mikve-api"
 main = "worker.js"
 compatibility_date = "2024-05-26"
-
-# ניתוב עבור הדומיין שלך
-routes = [
-    { pattern = "smti.uk/mikve/api", custom_domain = true }
-]
-
 # חיבור למסד הנתונים D1
 [[d1_databases]]
 binding = "DB"
