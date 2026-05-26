@@ -6,33 +6,90 @@ function cleanText(text) {
 
 function formatDateIL(dateString) {
   if (!dateString) return null;
-  
-  // חיתוך התאריך בדיוק כפי שהתקבל מהשרת, ללא חישובי אזורי זמן
   const datePart = dateString.split('T')[0]; 
   if (!datePart) return null;
-  
-  const parts = datePart.split('-'); // ["YYYY", "MM", "DD"]
+  const parts = datePart.split('-'); 
   if (parts.length !== 3) return null;
-  
   const year = parseInt(parts[0], 10);
   const month = parts[1];
   const day = parts[2];
-  
   return { 
     year: year, 
     formatted: `${day}/${month}/${year}` 
   };
 }
 
+// פונקציית עזר למשיכת כל המשתנים מאותו סוג לפי סדר
+function getAllParams(params, prefix) {
+  let arr = [];
+  let i = 1;
+  while(params[`${prefix}_${i}`] !== undefined) {
+    arr.push(params[`${prefix}_${i}`]);
+    i++;
+  }
+  return arr;
+}
+
+// בדיקת תקינות ספרות ביקורת אשראי (אלגוריתם Luhn)
+function isValidLuhn(ccNum) {
+  if (!ccNum || ccNum.length < 8 || ccNum.length > 19 || !/^\d+$/.test(ccNum)) return false;
+  let sum = 0;
+  let shouldDouble = false;
+  for (let i = ccNum.length - 1; i >= 0; i--) {
+    let digit = parseInt(ccNum.charAt(i), 10);
+    if (shouldDouble) {
+      if ((digit *= 2) > 9) digit -= 9;
+    }
+    sum += digit;
+    shouldDouble = !shouldDouble;
+  }
+  return (sum % 10) === 0;
+}
+
+// בדיקת תקינות תוקף כרטיס אשראי
+function isValidExp(exp) {
+  if (!exp || exp.length !== 4 || !/^\d+$/.test(exp)) return false;
+  const month = parseInt(exp.substring(0, 2), 10);
+  const year = parseInt(exp.substring(2, 4), 10);
+  if (month < 1 || month > 12) return false;
+
+  const now = new Date();
+  const currentYear = parseInt(now.getFullYear().toString().substring(2, 4), 10);
+  const currentMonth = now.getMonth() + 1;
+
+  if (year < currentYear) return false;
+  if (year === currentYear && month < currentMonth) return false;
+  return true;
+}
+
 export async function processIvrFlow(clientData, params, token, env) {
-  const { main_menu, cc_number, cc_exp, cc_cvv } = params;
   const actualClubId = clientData.clubId;
   const actualClientId = clientData.id;
 
+  const main_menus = getAllParams(params, 'main_menu');
+  const peima_steps = getAllParams(params, 'peima_step');
+  const sub_confirms = getAllParams(params, 'sub_confirm');
+  const cc_numbers = getAllParams(params, 'cc_number');
+  const cc_exps = getAllParams(params, 'cc_exp');
+  const cc_cvvs = getAllParams(params, 'cc_cvv');
+  const fail_retries = getAllParams(params, 'fail_retry');
+
+  // אם הלקוח לחץ כוכבית במסך כשלון, מאפסים את הכל לחלוטין וחוזרים להתחלה
+  if (fail_retries.includes('*')) return "&";
+
+  const failRetryAmountCancellations = fail_retries.filter(v => v === '2').length;
+  const failRetryCcCancellations = fail_retries.filter(v => v === '1').length;
+
   // ------------------------------------------------------------------
-  // שלב 0: הקראת נתונים ובחירת תפריט ראשי
+  // שלב 0: תפריט ראשי
   // ------------------------------------------------------------------
-  if (!main_menu) {
+  let validMainMenus = main_menus.filter(v => v === '1' || v === '2');
+  let mainMenuCancels = main_menus.filter(v => v === '*').length;
+  let isMainMenuSelected = validMainMenus.length > mainMenuCancels;
+  let selectedMenu = isMainMenuSelected ? validMainMenus[validMainMenus.length - 1] : null;
+
+  if (!isMainMenuSelected) {
+    const nextIdx = main_menus.length + 1;
     const balanceInShekels = (clientData.lastBalance || 0) / 100; 
     let subEndParts = [`t-לא נמצא תוקף למנוי במערכת`];
     
@@ -50,14 +107,27 @@ export async function processIvrFlow(clientData, params, token, env) {
       `t-לטעינת פעימות הקישו 1.t-לחידוש מנוי חודשי הקישו 2`
     ];
 
-    return `read=${ttsParts.join(".")}=main_menu,,1,,,NO,,,,12,,,,,no`;
+    return `read=${ttsParts.join(".")}=main_menu_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
   }
 
   // ------------------------------------------------------------------
-  // שלב 1: טעינת פעימות (הוספה והפחתה דינמית)
+  // שלב 1: אישור סכום (פעימות או חידוש)
   // ------------------------------------------------------------------
-  if (main_menu === "1") {
-    // משיכת חוקי ההטענה של הקבוצה
+  const amountCancels = cc_numbers.filter(v => v === '*').length + failRetryAmountCancellations;
+  let isAmountAccepted = false;
+  let finalAmountAgorot = 0;
+  let paymentItemType = 0;
+  let subDates = {};
+
+  if (selectedMenu === '1') {
+    paymentItemType = 2; // פעימות
+    let peimaAcceptances = peima_steps.filter(v => v === '1').length;
+    let peimaBacks = peima_steps.filter(v => v === '*').length;
+    
+    if (peimaBacks > peimaAcceptances) return "&"; // ביטול סכום -> חזרה להתחלה
+
+    isAmountAccepted = peimaAcceptances > amountCancels;
+
     const groupRes = await fetch(`${BASE_URL}/Group`, {
       method: 'GET',
       headers: { "Authorization": `Bearer ${token}`, "clubExternalId": params.club }
@@ -72,60 +142,38 @@ export async function processIvrFlow(clientData, params, token, env) {
     const minAmount = minAmountAgorot / 100;
     const stepAmount = stepAmountAgorot / 100;
 
-    let currentAmount = minAmount;
-    let isAccepted = false;
-    let stepIndex = 1;
-
-    // חישוב הסכום הדינמי על פי משתני העבר (ללא בקשת אותו משתנה פעמיים!)
-    while (true) {
-      const stepVal = params[`peima_step_${stepIndex}`];
-      if (!stepVal) break; // הגענו לשלב שעוד לא נשאל
-      
-      if (stepVal === '1') {
-        isAccepted = true; // הלקוח אישר את הסכום
-        break;
-      } else if (stepVal === '2') {
-        currentAmount += stepAmount;
-      } else if (stepVal === '3') {
-        currentAmount -= stepAmount;
-        if (currentAmount < minAmount) currentAmount = minAmount; // לא נותן לרדת מהמינימום
+    // חישוב מחדש של הסכום העדכני
+    let currentPeimaAmountShekels = minAmount;
+    for (let val of peima_steps) {
+      if (val === '2') currentPeimaAmountShekels += stepAmount;
+      if (val === '3') {
+        currentPeimaAmountShekels -= stepAmount;
+        if (currentPeimaAmountShekels < minAmount) currentPeimaAmountShekels = minAmount;
       }
-      stepIndex++;
     }
 
-    // אם הלקוח טרם אישר סופית, מבקשים את המשתנה הבא בתור
-    if (!isAccepted) {
-      let promptMsg = `read=t-הסכום לתשלום הוא.n-${currentAmount}.t-שקלים.t-לאישור ומעבר לתשלום הקישו 1.t-להוספת.n-${stepAmount}.t-שקלים הקישו 2`;
-      
-      // הוספת אופציית הפחתה רק אם יש מה להפחית מעל המינימום
-      if (currentAmount > minAmount) {
+    if (!isAmountAccepted) {
+      const nextIdx = peima_steps.length + 1;
+      let promptMsg = `read=t-הסכום לתשלום הוא.n-${currentPeimaAmountShekels}.t-שקלים.t-לאישור ומעבר לתשלום הקישו 1.t-להוספת.n-${stepAmount}.t-שקלים הקישו 2`;
+      let allowedKeys = "12*";
+      if (currentPeimaAmountShekels > minAmount) {
         promptMsg += `.t-להפחתת.n-${stepAmount}.t-שקלים הקישו 3`;
+        allowedKeys = "123*";
       }
-      
-      promptMsg += `=peima_step_${stepIndex},,1,,,NO,,,,,,,,,no`;
+      promptMsg += `=peima_step_${nextIdx},,1,,,NO,,,,${allowedKeys},,,,,no`;
       return promptMsg;
     }
+    finalAmountAgorot = currentPeimaAmountShekels * 100;
 
-    // אם אושר - עוברים לגביית אשראי
-    if (!cc_number) return `read=m-1422=cc_number,,16,,,NO,,,,,,,,,no`;
-    if (!cc_exp) return `read=m-1424=cc_exp,,4,,,NO,,,,,,,,,no`;
-    if (!cc_cvv) return `read=m-1428=cc_cvv,,4,,,NO,,,,,,,,,no`;
+  } else if (selectedMenu === '2') {
+    paymentItemType = 1; // חידוש חודשי
+    let subAcceptances = sub_confirms.filter(v => v === '1').length;
+    let subBacks = sub_confirms.filter(v => v === '*').length;
+    
+    if (subBacks > subAcceptances) return "&"; // ביטול סכום -> חזרה להתחלה
 
-    const finalAmountAgorot = currentAmount * 100;
-    const paymentPayload = {
-      payments: [{ clientId: actualClientId, clubId: actualClubId, amount: finalAmountAgorot, paymentType: 1, creditCardNumber: cc_number, expDate: cc_exp, cvv: cc_cvv, personalId: "" }],
-      purchaseItems: [{ transactionType: 1, itemType: 2, clientId: actualClientId, clubId: actualClubId, moneyValue: finalAmountAgorot, price: finalAmountAgorot, qty: 1, totalPrice: finalAmountAgorot }],
-      IsAdminUser: true, clientId: actualClientId, clubId: actualClubId, amount: finalAmountAgorot
-    };
+    isAmountAccepted = subAcceptances > amountCancels;
 
-    return await executePayment(paymentPayload, finalAmountAgorot, "פעימות", params, actualClientId, token, env);
-  }
-
-  // ------------------------------------------------------------------
-  // שלב 2: חידוש מנוי חודשי
-  // ------------------------------------------------------------------
-  if (main_menu === "2") {
-    // משיכת פרטי חידוש מנוי
     const subRes = await fetch(`${BASE_URL}/GetRenewSubscriptionStartAndEndDatesAndPrice/${actualClientId}`, {
       method: 'POST',
       headers: { "Authorization": `Bearer ${token}`, "clubExternalId": params.club, "Content-Type": "application/json" },
@@ -140,38 +188,107 @@ export async function processIvrFlow(clientData, params, token, env) {
     const fromDate = formatDateIL(subData.fromDate);
     const toDate = formatDateIL(subData.toDate);
 
-    if (!params.sub_confirm) {
-      return `read=t-חידוש מנוי מתאריך.dateH-${fromDate ? fromDate.formatted : ""}.t-עד תאריך.dateH-${toDate ? toDate.formatted : ""}.t-בסך.n-${priceShekels}.t-שקלים.t-לאישור ומעבר לתשלום הקישו 1=sub_confirm,,1,,,NO,,,,,,,,,no`;
+    if (!isAmountAccepted) {
+      const nextIdx = sub_confirms.length + 1;
+      return `read=t-חידוש מנוי מתאריך.dateH-${fromDate ? fromDate.formatted : ""}.t-עד תאריך.dateH-${toDate ? toDate.formatted : ""}.t-בסך.n-${priceShekels}.t-שקלים.t-לאישור ומעבר לתשלום הקישו 1=sub_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
     }
-
-    if (params.sub_confirm !== '1') {
-       return `id_list_message=t-הפעולה בוטלה`;
-    }
-
-    // אם אושר - עוברים לגביית אשראי
-    if (!cc_number) return `read=m-1422=cc_number,,16,,,NO,,,,,,,,,no`;
-    if (!cc_exp) return `read=m-1424=cc_exp,,4,,,NO,,,,,,,,,no`;
-    if (!cc_cvv) return `read=m-1428=cc_cvv,,4,,,NO,,,,,,,,,no`;
-
-    const paymentPayload = {
-      payments: [{ clientId: actualClientId, clubId: actualClubId, amount: priceAgorot, paymentType: 1, creditCardNumber: cc_number, expDate: cc_exp, cvv: cc_cvv, personalId: "" }],
-      purchaseItems: [{ transactionType: 1, itemType: 1, clientId: actualClientId, clubId: actualClubId, startDate: subData.fromDate, endDate: subData.toDate, price: priceAgorot, qty: 1, totalPrice: priceAgorot }],
-      IsAdminUser: true, clientId: actualClientId, clubId: actualClubId, amount: priceAgorot
-    };
-
-    return await executePayment(paymentPayload, priceAgorot, "מנוי חודשי", params, actualClientId, token, env);
+    finalAmountAgorot = priceAgorot;
+    subDates = { startDate: subData.fromDate, endDate: subData.toDate };
   }
 
-  // במקרה של בחירה שגויה בתפריט הראשי
-  return `id_list_message=t-בחירה שגויה`;
+  // ------------------------------------------------------------------
+  // שלב 2: קליטת אשראי 
+  // ------------------------------------------------------------------
+  const numCancels = amountCancels + cc_exps.filter(v => v === '*').length + failRetryCcCancellations;
+  let validCcNumbers = cc_numbers.filter(v => v !== '*' && isValidLuhn(v));
+  let isCcNumValid = validCcNumbers.length > numCancels;
+  let currentCcNumber = isCcNumValid ? validCcNumbers[validCcNumbers.length - 1] : null;
+
+  if (!isCcNumValid) {
+    const nextIdx = cc_numbers.length + 1;
+    let msg = "m-1422";
+    if (cc_numbers.length > 0) {
+      const lastEntered = cc_numbers[cc_numbers.length - 1];
+      if (lastEntered !== '*' && !isValidLuhn(lastEntered)) {
+        msg = "t-מספר כרטיס שגוי.m-1422";
+      }
+    }
+    // פרמטר 10 נשאר ריק כדי לאפשר כוכבית וספרות במקביל לפי הגדרות המערכת
+    return `read=${msg}=cc_number_${nextIdx},,16,,,NO,,,,,,,,,no`;
+  }
+
+  const expCancels = numCancels + cc_cvvs.filter(v => v === '*').length;
+  let validCcExps = cc_exps.filter(v => v !== '*' && isValidExp(v));
+  let isCcExpValid = validCcExps.length > expCancels;
+  let currentCcExp = isCcExpValid ? validCcExps[validCcExps.length - 1] : null;
+
+  if (!isCcExpValid) {
+    const nextIdx = cc_exps.length + 1;
+    let msg = "m-1424";
+    if (cc_exps.length > 0) {
+      const lastEntered = cc_exps[cc_exps.length - 1];
+      if (lastEntered !== '*' && !isValidExp(lastEntered)) {
+        msg = "t-תוקף שגוי.m-1424";
+      }
+    }
+    return `read=${msg}=cc_exp_${nextIdx},,4,,,NO,,,,,,,,,no`;
+  }
+
+  const cvvCancels = expCancels;
+  let validCcCvvs = cc_cvvs.filter(v => v !== '*' && v.length >= 3);
+  let ccCvvAcceptances = validCcCvvs.length;
+  let isCcCvvValid = ccCvvAcceptances > cvvCancels;
+  let currentCcCvv = isCcCvvValid ? validCcCvvs[validCcCvvs.length - 1] : null;
+
+  if (isCcCvvValid) {
+    // אם מספר הפעמים שהזנו CVV תקין גדול ממספר הפעמים שכבר ענינו לתפריט השגיאה, זה סימן שצריך לחייב כעת
+    if (ccCvvAcceptances > fail_retries.length) {
+      const paymentPayload = {
+        payments: [{ clientId: actualClientId, clubId: actualClubId, amount: finalAmountAgorot, paymentType: 1, creditCardNumber: currentCcNumber, expDate: currentCcExp, cvv: currentCcCvv, personalId: "" }],
+        purchaseItems: [{
+          transactionType: 1,
+          itemType: paymentItemType,
+          clientId: actualClientId,
+          clubId: actualClubId,
+          price: finalAmountAgorot,
+          qty: 1,
+          totalPrice: finalAmountAgorot
+        }],
+        IsAdminUser: true, clientId: actualClientId, clubId: actualClubId, amount: finalAmountAgorot
+      };
+
+      if (paymentItemType === 2) {
+        paymentPayload.purchaseItems[0].moneyValue = finalAmountAgorot;
+      } else if (paymentItemType === 1) {
+        paymentPayload.purchaseItems[0].startDate = subDates.startDate;
+        paymentPayload.purchaseItems[0].endDate = subDates.endDate;
+      }
+
+      const actionName = paymentItemType === 2 ? "פעימות" : "מנוי חודשי";
+      const payRes = await executePayment(paymentPayload, finalAmountAgorot, params, actualClientId, token, env);
+
+      if (payRes.isSuccess) {
+        return `id_list_message=t-בוצע בהצלחה תשלום.t-עבור.${actionName}.t-על סך.n-${finalAmountAgorot / 100}.t-שקלים`;
+      } else {
+        const nextRetryIdx = fail_retries.length + 1;
+        let retryMsg = `read=t-התשלום נכשל.t-להקשת אשראי מחדש הקישו 1`;
+        let allowed = "1*";
+        if (paymentItemType === 2) {
+          retryMsg += `.t-לבחירת סכום אחר הקישו 2`;
+          allowed = "12*";
+        }
+        retryMsg += `.t-לחזרה לתפריט הראשי הקישו כוכבית=fail_retry_${nextRetryIdx},,1,,,NO,,,,${allowed},,,,,no`;
+        return retryMsg;
+      }
+    }
+  } else {
+    const nextIdx = cc_cvvs.length + 1;
+    return `read=m-1428=cc_cvv_${nextIdx},,4,,,NO,,,,,,,,,no`;
+  }
 }
 
-// ------------------------------------------------------------------
-// פונקציית עזר: ביצוע התשלום מול ה-API ושמירת הלוגים
-// ------------------------------------------------------------------
-async function executePayment(paymentPayload, amountAgorot, actionName, params, actualClientId, token, env) {
+async function executePayment(paymentPayload, amountAgorot, params, actualClientId, token, env) {
   const amountShekels = amountAgorot / 100;
-  
   const payReq = await fetch(`${BASE_URL}/Client/AdminPurchase`, {
     method: 'POST',
     headers: { "Authorization": `Bearer ${token}`, "clubExternalId": params.club, "Content-Type": "application/json" },
@@ -180,16 +297,10 @@ async function executePayment(paymentPayload, amountAgorot, actionName, params, 
 
   const payRes = await payReq.json();
   
-  // כתיבה לטבלת הלוגים ב-D1
   const logMsg = payRes.isSuccess ? "הצלחה" : (payRes.message || "שגיאה בחיוב");
   await env.DB.prepare("INSERT INTO charge_logs (club_id, client_id, amount, status, response_msg) VALUES (?, ?, ?, ?, ?)")
     .bind(params.club, actualClientId, amountShekels, payRes.isSuccess ? 'SUCCESS' : 'FAILED', logMsg)
     .run();
 
-  // הודעת סיום למערכת (ללא בקשת משתנה נוסף כדי שהמערכת תעבור ל-go_to הבא)
-  if (payRes.isSuccess) {
-    return `id_list_message=t-בוצע בהצלחה תשלום.t-עבור.${actionName}.t-על סך.n-${amountShekels}.t-שקלים`;
-  } else {
-    return `id_list_message=t-התשלום נכשל`;
-  }
+  return { isSuccess: payRes.isSuccess };
 }
