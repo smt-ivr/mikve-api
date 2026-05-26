@@ -39,15 +39,15 @@ export async function processIvrFlow(clientData, params, token, env) {
       `t-למעבר לתפריט הטענת יתרה הקישו 1`
     ];
 
-    return `read=${ttsParts.join(".")}=menu_choice,,1,,,NO,,,,1`;
+    return `read=${ttsParts.join(".")}=menu_choice,,1,,,NO,,,,1,,,,,no`;
   }
 
   // שלבים 1 עד 5: איסוף פרטי הטענה
   if (menu_choice === "1") {
-    if (!pay_amount) return `read=t-נא להקיש את הסכום להטענה בשקלים, ובסיום סולמית=pay_amount,,4,,,NO,,,,`;
-    if (!cc_number) return `read=t-נא להקיש את מספר כרטיס האשראי, ובסיום סולמית=cc_number,,16,,,NO,,,,`;
-    if (!cc_exp) return `read=t-נא להקיש את תוקף הכרטיס, ארבע ספרות של חודש ושנה=cc_exp,,4,,,NO,,,,`;
-    if (!cc_cvv) return `read=t-נא להקיש שלוש ספרות בגב הכרטיס, ובסיום סולמית=cc_cvv,,4,,,NO,,,,`;
+    if (!pay_amount) return `read=t-נא להקיש את הסכום להטענה בשקלים, ובסיום סולמית=pay_amount,,4,2,,Number`;
+    if (!cc_number) return `read=m-1422=cc_number,,16,,,NO,,,,,,,,,no`;
+    if (!cc_exp) return `read=m-1424=cc_exp,,4,,,NO,,,,,,,,,no`;
+    if (!cc_cvv) return `read=m-1428=cc_cvv,,4,,,NO,,,,,,,,,no`;
 
     // ביצוע פעולת התשלום
     const amountAgorot = parseInt(pay_amount, 10) * 100;
@@ -72,9 +72,9 @@ export async function processIvrFlow(clientData, params, token, env) {
       .run();
 
     if (payRes.isSuccess) {
-      return `id_list_message=t-ההטענה בוצעה בהצלחה.t-סכום ההטענה הוא.n-${pay_amount}.t-שקלים.t-המשך יום נעים`;
+      return `id_list_message=t-בוצע בהצלחה הטענה על סך.n-${pay_amount}.t-שקלים`;
     } else {
-      return `id_list_message=t-שגיאה בביצוע התשלום.t-הכרטיס לא חויב.t-המשך יום נעים`;
+      return `id_list_message=t-התשלום נכשל`;
     }
   }
 }
