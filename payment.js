@@ -6,12 +6,21 @@ function cleanText(text) {
 
 function formatDateIL(dateString) {
   if (!dateString) return null;
-  const utcDate = new Date(dateString);
-  if (isNaN(utcDate.getTime())) return null;
-  const ilDate = new Date(utcDate.toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
+  
+  // חיתוך התאריך בדיוק כפי שהתקבל מהשרת, ללא חישובי אזורי זמן
+  const datePart = dateString.split('T')[0]; 
+  if (!datePart) return null;
+  
+  const parts = datePart.split('-'); // ["YYYY", "MM", "DD"]
+  if (parts.length !== 3) return null;
+  
+  const year = parseInt(parts[0], 10);
+  const month = parts[1];
+  const day = parts[2];
+  
   return { 
-    year: ilDate.getFullYear(), 
-    formatted: `${String(ilDate.getDate()).padStart(2, '0')}/${String(ilDate.getMonth() + 1).padStart(2, '0')}/${ilDate.getFullYear()}` 
+    year: year, 
+    formatted: `${day}/${month}/${year}` 
   };
 }
 
@@ -86,7 +95,15 @@ export async function processIvrFlow(clientData, params, token, env) {
 
     // אם הלקוח טרם אישר סופית, מבקשים את המשתנה הבא בתור
     if (!isAccepted) {
-      return `read=t-הסכום לתשלום הוא.n-${currentAmount}.t-שקלים.t-לאישור ומעבר לתשלום הקישו 1.t-להוספת.n-${stepAmount}.t-שקלים הקישו 2.t-להפחתת.n-${stepAmount}.t-שקלים הקישו 3=peima_step_${stepIndex},,1,,,NO,,,,,,,,,no`;
+      let promptMsg = `read=t-הסכום לתשלום הוא.n-${currentAmount}.t-שקלים.t-לאישור ומעבר לתשלום הקישו 1.t-להוספת.n-${stepAmount}.t-שקלים הקישו 2`;
+      
+      // הוספת אופציית הפחתה רק אם יש מה להפחית מעל המינימום
+      if (currentAmount > minAmount) {
+        promptMsg += `.t-להפחתת.n-${stepAmount}.t-שקלים הקישו 3`;
+      }
+      
+      promptMsg += `=peima_step_${stepIndex},,1,,,NO,,,,,,,,,no`;
+      return promptMsg;
     }
 
     // אם אושר - עוברים לגביית אשראי
