@@ -41,7 +41,7 @@ export async function processIvrFlow(clientData, params, token, env) {
       `t-לטעינת פעימות הקישו 1.t-לחידוש מנוי חודשי הקישו 2`
     ];
 
-    return `read=${ttsParts.join(".")}=main_menu,,1,,,NO,,,,1,,,,,no`;
+    return `read=${ttsParts.join(".")}=main_menu,,1,,,NO,,,,12,,,,,no`;
   }
 
   // ------------------------------------------------------------------
