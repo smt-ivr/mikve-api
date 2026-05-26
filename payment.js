@@ -272,7 +272,7 @@ export async function processIvrFlow(clientData, params, token, env) {
     }
   } else {
     const nextIdx = cc_cvvs.length + 1;
-    return `read=m-1428=cc_cvv_${nextIdx},,4,,,NO,,,,,,,,,no`;
+    return `read=m-1428=cc_cvv_${nextIdx},,4,3,,NO,,,,,,,,,no`;
   }
 }
 
