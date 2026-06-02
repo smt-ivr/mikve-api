@@ -106,7 +106,7 @@ export async function processManagementFlow(clientData, params, token, env) {
       if (!isAddConfirm) {
         const nextIdx = mgmt_add_confirms.length + 1;
         // הודעת הבהרה על מחיקת הכרטיסים הקודמים ואי ביצוע חיוב כעת
-        return `read=t-שימו לב.t-יצירת כרטיס חדש תמחק אמצעי תשלום קודמים השמורים במערכת.t-הזנת האשראי משמשת לשמירת הכרטיס בלבד.t-והמערכת לא תבצע שום חיוב כעת.t-לאישור ומעבר להזנת אשראי הקישו 1=mgmt_add_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
+        return `read=t-שימו לב, יצירת כרטיס חדש תמחק אמצעי תשלום קודמים השמורים במערכת.t-הזנת האשראי משמשת לשמירת הכרטיס בלבד, והמערכת לא תבצע שום חיוב כעת.t-לאישור ומעבר להזנת אשראי הקישו 1לאישור ומעבר להזנת אשראי הקישו 1=mgmt_add_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
       }
 
       // קליטת פרטי האשראי
@@ -215,7 +215,7 @@ export async function processManagementFlow(clientData, params, token, env) {
         const nextIdx = mgmt_renew_sub_confirms.length + 1;
         const statusStr = clientData.autoRenewSubscription ? "מופעל" : "כבוי";
         const actStr = clientData.autoRenewSubscription ? "לביטול" : "להפעלה";
-        return `read=t-חידוש מנוי אוטומטי כעת.${statusStr}.t-${actStr}.t-הקישו 1=mgmt_renew_sub_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
+        return `read=t-חידוש מנוי אוטומטי כעת.t-${statusStr}.t-${actStr}.t-הקישו 1=mgmt_renew_sub_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
       }
 
       // שליחת בקשת ה-PATCH עם האובייקט המלא ושינוי הסטטוס
@@ -237,7 +237,7 @@ export async function processManagementFlow(clientData, params, token, env) {
         const nextIdx = mgmt_renew_lic_confirms.length + 1;
         const statusStr = clientData.autoRenewLicence ? "מופעל" : "כבוי";
         const actStr = clientData.autoRenewLicence ? "לביטול" : "להפעלה";
-        return `read=t-חידוש רישיון אוטומטי כעת.${statusStr}.t-${actStr}.t-הקישו 1=mgmt_renew_lic_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
+        return `read=t-חידוש רישיון אוטומטי כעת.t-${statusStr}.t-${actStr}.t-הקישו 1=mgmt_renew_lic_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
       }
 
       // שליחת בקשת ה-PATCH עם האובייקט המלא ושינוי הסטטוס
