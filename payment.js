@@ -1,7 +1,8 @@
 const BASE_URL = "https://prod.xn--8dbba8a7b.com";
 
+// הפונקציה עודכנה כדי לסנן תווים מיוחדים שימות המשיח לא יודע להקריא
 function cleanText(text) {
-  return text ? text.replace(/[\.\-]/g, ' ').trim() : "";
+  return text ? text.replace(/[\.\-\"\'\,\:\;\!\?\(\)\[\]]/g, ' ').replace(/\s+/g, ' ').trim() : "";
 }
 
 function formatDateIL(dateString) {
@@ -69,6 +70,7 @@ export async function processIvrFlow(clientData, params, token, env) {
   const main_menus = getAllParams(params, 'main_menu');
   const peima_steps = getAllParams(params, 'peima_step');
   const sub_confirms = getAllParams(params, 'sub_confirm');
+  const lic_confirms = getAllParams(params, 'lic_confirm'); // נוסף עבור חידוש רישיון
   const cc_numbers = getAllParams(params, 'cc_number');
   const cc_exps = getAllParams(params, 'cc_exp');
   const cc_cvvs = getAllParams(params, 'cc_cvv');
@@ -79,7 +81,7 @@ export async function processIvrFlow(clientData, params, token, env) {
   // ------------------------------------------------------------------
   // שלב 0: תפריט ראשי
   // ------------------------------------------------------------------
-  let validMainMenus = main_menus.filter(v => v === '1' || v === '2');
+  let validMainMenus = main_menus.filter(v => v === '1' || v === '2' || v === '3');
   let isMainMenuSelected = validMainMenus.length > 0;
   let selectedMenu = isMainMenuSelected ? validMainMenus[validMainMenus.length - 1] : null;
 
@@ -99,14 +101,14 @@ export async function processIvrFlow(clientData, params, token, env) {
       `t-שלום`, `t-${cleanText(`${clientData.firstName} ${clientData.lastName}`)}`,
       `t-יתרת הפעימות שלך היא`, `n-${balanceInShekels}`, `t-שקלים`,
       ...subEndParts, ...licExpParts,
-      `t-לטעינת פעימות הקישו 1.t-לחידוש מנוי חודשי הקישו 2`
+      `t-לטעינת פעימות הקישו 1.t-לחידוש מנוי חודשי הקישו 2.t-לחידוש רישיון שנתי הקישו 3`
     ];
 
-    return `read=${ttsParts.join(".")}=main_menu_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
+    return `read=${ttsParts.join(".")}=main_menu_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
   }
 
   // ------------------------------------------------------------------
-  // שלב 1: אישור סכום (פעימות או חידוש)
+  // שלב 1: אישור סכום
   // ------------------------------------------------------------------
   const amountCancels = cc_numbers.filter(v => v === '*').length + fail_retries.filter(v => v === '2').length;
   let isAmountAccepted = false;
@@ -117,7 +119,6 @@ export async function processIvrFlow(clientData, params, token, env) {
   if (selectedMenu === '1') {
     paymentItemType = 2; // פעימות
     
-    // התיקון העמוק: אם הוקש כוכבית בסכום, תמיד נצא לאיפוס השלוחה
     if (peima_steps.includes('*')) return "&"; 
 
     let peimaAcceptances = peima_steps.filter(v => v === '1').length;
@@ -162,7 +163,6 @@ export async function processIvrFlow(clientData, params, token, env) {
   } else if (selectedMenu === '2') {
     paymentItemType = 1; // חידוש חודשי
     
-    // התיקון העמוק גם כאן
     if (sub_confirms.includes('*')) return "&"; 
 
     let subAcceptances = sub_confirms.filter(v => v === '1').length;
@@ -188,6 +188,45 @@ export async function processIvrFlow(clientData, params, token, env) {
     }
     finalAmountAgorot = priceAgorot;
     subDates = { startDate: subData.fromDate, endDate: subData.toDate };
+
+  } else if (selectedMenu === '3') {
+    paymentItemType = 6; // רישיון שנתי
+    
+    if (lic_confirms.includes('*')) return "&"; 
+
+    let licAcceptances = lic_confirms.filter(v => v === '1').length;
+    isAmountAccepted = licAcceptances > amountCancels;
+
+    // שליפת פרטי המועדון למשיכת מחיר הרישיון
+    const clubRes = await fetch(`${BASE_URL}/Club/GetCurrent`, {
+      method: 'GET',
+      headers: { "Authorization": `Bearer ${token}`, "clubExternalId": params.club }
+    });
+
+    if (!clubRes.ok) return `id_list_message=t-שגיאה בשליפת נתוני המערכת`;
+    const clubData = await clubRes.json();
+
+    const priceAgorot = clubData.licensePrice || 0;
+    const priceShekels = priceAgorot / 100;
+    
+    // חישוב תאריך התפוגה החדש - שנתים מהתאריך הקיים
+    let currentLicDate = new Date();
+    if (clientData.licenceExp) {
+       const parsed = new Date(clientData.licenceExp);
+       if (!isNaN(parsed.getTime())) currentLicDate = parsed;
+    }
+    
+    const newLicDate = new Date(currentLicDate);
+    newLicDate.setFullYear(newLicDate.getFullYear() + 1);
+    
+    // עיצוב התאריך עבור ימות המשיח (DD/MM/YYYY)
+    const formattedNewLicDate = `${newLicDate.getDate()}/${newLicDate.getMonth() + 1}/${newLicDate.getFullYear()}`;
+
+    if (!isAmountAccepted) {
+      const nextIdx = lic_confirms.length + 1;
+      return `read=t-הרשיון הוא.t-שנתי.t-הרישיון יחודש עד תאריך.dateH-${formattedNewLicDate}.t-בסך.n-${priceShekels}.t-שקלים.t-לאישור ומעבר לתשלום הקישו 1=lic_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
+    }
+    finalAmountAgorot = priceAgorot;
   }
 
   // ------------------------------------------------------------------
@@ -254,14 +293,21 @@ export async function processIvrFlow(clientData, params, token, env) {
       paymentPayload.purchaseItems[0].endDate = subDates.endDate;
     }
 
-    const actionName = paymentItemType === 2 ? "פעימות" : "מנוי חודשי";
+    let actionName = "";
+    if (paymentItemType === 2) actionName = "פעימות";
+    else if (paymentItemType === 1) actionName = "מנוי חודשי";
+    else if (paymentItemType === 6) actionName = "חידוש רישיון";
+
     const payRes = await executePayment(paymentPayload, finalAmountAgorot, params, actualClientId, token, env);
 
     if (payRes.isSuccess) {
       return `id_list_message=t-בוצע בהצלחה תשלום.t-עבור.${actionName}.t-על סך.n-${finalAmountAgorot / 100}.t-שקלים`;
     } else {
       const nextRetryIdx = fail_retries.length + 1;
-      let retryMsg = `read=t-התשלום נכשל.t-להקשת אשראי מחדש הקישו 1`;
+      
+      // השמעת הודעת השגיאה המפורטת כשהיא נקייה מתווים מיוחדים
+      let retryMsg = `read=t-התשלום נכשל.t-השגיאה מהסליקה היא.t-${payRes.message}.t-להקשת אשראי מחדש הקישו 1`;
+      
       let allowed = "1*";
       if (paymentItemType === 2) {
         retryMsg += `.t-לבחירת סכום אחר הקישו 2`;
@@ -286,10 +332,16 @@ async function executePayment(paymentPayload, amountAgorot, params, actualClient
 
   const payRes = await payReq.json();
   
+  // במקרה של כשלון מתבצע ניקוי לתשובה מחברת הסליקה
+  let cleanedMessage = "שגיאה לא ידועה";
+  if (!payRes.isSuccess) {
+    cleanedMessage = cleanText(payRes.message || "שגיאה בחיוב");
+  }
+
   const logMsg = payRes.isSuccess ? "הצלחה" : (payRes.message || "שגיאה בחיוב");
   await env.DB.prepare("INSERT INTO charge_logs (club_id, client_id, amount, status, response_msg) VALUES (?, ?, ?, ?, ?)")
     .bind(params.club, actualClientId, amountShekels, payRes.isSuccess ? 'SUCCESS' : 'FAILED', logMsg)
     .run();
 
-  return { isSuccess: payRes.isSuccess };
+  return { isSuccess: payRes.isSuccess, message: cleanedMessage };
 }
