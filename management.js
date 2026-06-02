@@ -43,7 +43,7 @@ function getMainMenuPrompt(clientData, currentCard, nextIdx, apiResponsePrefix =
   if (!currentCard) {
     let msg = `t-לא קיים אמצעי תשלום במערכת.t-להוספת כרטיס אשראי הקישו 1`;
     if (apiResponsePrefix) {
-       return `id_list_message=&read=${apiResponsePrefix}.${msg}=mgmt_main_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
+       return `id_list_message=${apiResponsePrefix}&read=${msg}=mgmt_main_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
     }
     return `read=${msg}=mgmt_main_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
   }
@@ -62,7 +62,7 @@ function getMainMenuPrompt(clientData, currentCard, nextIdx, apiResponsePrefix =
   let msg = `t-במערכת שמור אמצעי תשלום המסתיים בספרות.d-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
   
   if (apiResponsePrefix) {
-    return `id_list_message=&read=${apiResponsePrefix}.${msg}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
+    return `id_list_message=${apiResponsePrefix}&read=${msg}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
   }
   return `read=${msg}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
 }
@@ -352,14 +352,14 @@ export async function processManagementFlow(clientData, params, token, env) {
             const currentAmountParam = params[`mgmt_cred_amount_${credSelections}`];
 
             if (currentAmountParam === undefined) {
-              return `read=t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,NO,,,,,,,,,no`;
+              return `read=t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,Number`;
             } else if (currentAmountParam === '*') {
               const nextIdx = mgmt_renews.length + 1;
               return `read=t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3.t-לחזרה הקישו כוכבית=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
             } else {
               const amountAgorot = parseInt(currentAmountParam, 10) * 100;
               if (isNaN(amountAgorot) || amountAgorot <= 0) {
-                return `read=t-סכום שגוי.t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,NO,,,,,,,,,no`;
+                return `read=t-סכום שגוי.t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,Number`;
               }
 
               const patchPayload = { ...clientData, autoRenewCredit: true, autoRenewCreditAmount: amountAgorot };
@@ -388,14 +388,14 @@ export async function processManagementFlow(clientData, params, token, env) {
             const currentAmountParam = params[`mgmt_cred_amount_${credSelections}`];
 
             if (currentAmountParam === undefined) {
-              return `read=t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,NO,,,,,,,,,no`;
+              return `read=t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,Number`;
             } else if (currentAmountParam === '*') {
               const nextIdx = mgmt_renews.length + 1;
               return `read=t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3.t-לחזרה הקישו כוכבית=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
             } else {
               const amountAgorot = parseInt(currentAmountParam, 10) * 100;
               if (isNaN(amountAgorot) || amountAgorot <= 0) {
-                return `read=t-סכום שגוי.t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,NO,,,,,,,,,no`;
+                return `read=t-סכום שגוי.t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,Number`;
               }
 
               const patchPayload = { ...clientData, autoRenewCredit: true, autoRenewCreditAmount: amountAgorot };
