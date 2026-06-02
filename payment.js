@@ -81,7 +81,8 @@ export async function processIvrFlow(clientData, params, token, env) {
   // ------------------------------------------------------------------
   // שלב 0: תפריט ראשי
   // ------------------------------------------------------------------
-  let validMainMenus = main_menus.filter(v => v === '1' || v === '2' || v === '3');
+  // הוספנו תמיכה גם בשלוחה 4 עבור ניהול אמצעי תשלום
+  let validMainMenus = main_menus.filter(v => v === '1' || v === '2' || v === '3' || v === '4');
   let isMainMenuSelected = validMainMenus.length > 0;
   let selectedMenu = isMainMenuSelected ? validMainMenus[validMainMenus.length - 1] : null;
 
@@ -101,10 +102,10 @@ export async function processIvrFlow(clientData, params, token, env) {
       `t-שלום`, `t-${cleanText(`${clientData.firstName} ${clientData.lastName}`)}`,
       `t-יתרת הפעימות שלך היא`, `n-${balanceInShekels}`, `t-שקלים`,
       ...subEndParts, ...licExpParts,
-      `t-לטעינת פעימות הקישו 1.t-לחידוש מנוי חודשי הקישו 2.t-לחידוש רישיון שנתי הקישו 3`
+      `t-לטעינת פעימות הקישו 1.t-לחידוש מנוי חודשי הקישו 2.t-לחידוש רישיון שנתי הקישו 3.t-לניהול אמצעי תשלום והוראות קבע הקישו 4`
     ];
 
-    return `read=${ttsParts.join(".")}=main_menu_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
+    return `read=${ttsParts.join(".")}=main_menu_${nextIdx},,1,,,NO,,,,1234*,,,,,no`;
   }
 
   // ------------------------------------------------------------------
@@ -209,7 +210,7 @@ export async function processIvrFlow(clientData, params, token, env) {
     const priceAgorot = clubData.licensePrice || 0;
     const priceShekels = priceAgorot / 100;
     
-    // חישוב תאריך התפוגה החדש - שנתים מהתאריך הקיים
+    // חישוב תאריך התפוגה החדש - שנה מהתאריך הקיים
     let currentLicDate = new Date();
     if (clientData.licenceExp) {
        const parsed = new Date(clientData.licenceExp);
@@ -230,7 +231,7 @@ export async function processIvrFlow(clientData, params, token, env) {
   }
 
   // ------------------------------------------------------------------
-  // שלב 2: קליטת אשראי 
+  // שלב 2: קליטת אשראי (מתבצע רק אם הלקוח בחר 1, 2 או 3)
   // ------------------------------------------------------------------
   const ccNumCancels = cc_exps.filter(v => v === '*').length + fail_retries.length;
   let validCcNumbers = cc_numbers.filter(v => v !== '*' && isValidLuhn(v));
