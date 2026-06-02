@@ -79,7 +79,7 @@ export async function processManagementFlow(clientData, params, token, env) {
       if (clientData.autoRenewLicence) statusParts.push("t-רישיון שנתי");
 
       let renewText = statusParts.length > 0
-        ? `t-מוגדר חידוש אוטומטי עבור.${statusParts.join(".t-ו")}`
+        ? `t-מוגדר חידוש אוטומטי עבור.${statusParts.join(".m-1182.")}`
         : `t-לא מוגדר חידוש אוטומטי במערכת`;
 
       let prompt = `read=t-במערכת שמור אמצעי תשלום המסתיים בספרות.d-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
