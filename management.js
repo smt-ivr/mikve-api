@@ -72,7 +72,7 @@ export async function processManagementFlow(clientData, params, token, env) {
   if (!isMgmtMain) {
     const nextIdx = mgmt_mains.length + 1;
     if (!hasCard) {
-      return `read=t-לא קיים אמצעי תשלום במערכת.t-להוספת כרטיס אשראי הקישו 1=mgmt_main_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
+      return `read=t-לא קים אמצעי תשלום במערכת.t-להוספת כרטיס אשראי הקישו 1=mgmt_main_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
     } else {
       let statusParts = [];
       if (clientData.autoRenewSubscription) statusParts.push("t-מנוי חודשי");
@@ -226,16 +226,36 @@ export async function processManagementFlow(clientData, params, token, env) {
             body: JSON.stringify(patchPayload)
           });
 
-          const nextIdx = mgmt_renews.length + 1;
+          const nextIdx = mgmt_mains.length + 1;
           const resultText = patchReq.ok
             ? `t-חידוש מנוי אוטומטי ${!clientData.autoRenewSubscription ? "הופעל" : "בוטל"} בהצלחה`
             : `t-שגיאה בעדכון ההגדרות`;
 
-          // חזרה לתפריט
-          return `read=${resultText}.t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
+          let statusParts = [];
+          const newSubState = !clientData.autoRenewSubscription;
+          if (newSubState) statusParts.push("t-מנוי חודשי");
+          if (clientData.autoRenewLicence) statusParts.push("t-רישיון שנתי");
+          if (clientData.autoRenewCredit) statusParts.push("t-פעימות");
+
+          let renewText = statusParts.length > 0
+            ? `t-מוגדר חידוש אוטומטי עבור.${statusParts.join(".m-1182.")}`
+            : `t-לא מוגדר חידוש אוטומטי במערכת`;
+
+          let prompt = `t-במערכת שמור אמצעי תשלום המסתיים בספרות.d-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
+          return `id_list_message=$&read=${resultText}.${prompt}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
         } else {
-          const nextIdx = mgmt_renews.length + 1;
-          return `read=t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
+          const nextIdx = mgmt_mains.length + 1;
+          let statusParts = [];
+          if (clientData.autoRenewSubscription) statusParts.push("t-מנוי חודשי");
+          if (clientData.autoRenewLicence) statusParts.push("t-רישיון שנתי");
+          if (clientData.autoRenewCredit) statusParts.push("t-פעימות");
+
+          let renewText = statusParts.length > 0
+            ? `t-מוגדר חידוש אוטומטי עבור.${statusParts.join(".m-1182.")}`
+            : `t-לא מוגדר חידוש אוטומטי במערכת`;
+
+          let prompt = `t-במערכת שמור אמצעי תשלום המסתיים בספרות.d-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
+          return `read=${prompt}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
         }
       }
 
@@ -258,15 +278,36 @@ export async function processManagementFlow(clientData, params, token, env) {
             body: JSON.stringify(patchPayload)
           });
 
-          const nextIdx = mgmt_renews.length + 1;
+          const nextIdx = mgmt_mains.length + 1;
           const resultText = patchReq.ok
             ? `t-חידוש רישיון אוטומטי ${!clientData.autoRenewLicence ? "הופעל" : "בוטל"} בהצלחה`
             : `t-שגיאה בעדכון ההגדרות`;
 
-          return `read=${resultText}.t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
+          let statusParts = [];
+          if (clientData.autoRenewSubscription) statusParts.push("t-מנוי חודשי");
+          const newLicState = !clientData.autoRenewLicence;
+          if (newLicState) statusParts.push("t-רישיון שנתי");
+          if (clientData.autoRenewCredit) statusParts.push("t-פעימות");
+
+          let renewText = statusParts.length > 0
+            ? `t-מוגדר חידוש אוטומטי עבור.${statusParts.join(".m-1182.")}`
+            : `t-לא מוגדר חידוש אוטומטי במערכת`;
+
+          let prompt = `t-במערכת שמור אמצעי תשלום המסתיים בספרות.d-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
+          return `id_list_message=$&read=${resultText}.${prompt}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
         } else {
-          const nextIdx = mgmt_renews.length + 1;
-          return `read=t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
+          const nextIdx = mgmt_mains.length + 1;
+          let statusParts = [];
+          if (clientData.autoRenewSubscription) statusParts.push("t-מנוי חודשי");
+          if (clientData.autoRenewLicence) statusParts.push("t-רישיון שנתי");
+          if (clientData.autoRenewCredit) statusParts.push("t-פעימות");
+
+          let renewText = statusParts.length > 0
+            ? `t-מוגדר חידוש אוטומטי עבור.${statusParts.join(".m-1182.")}`
+            : `t-לא מוגדר חידוש אוטומטי במערכת`;
+
+          let prompt = `t-במערכת שמור אמצעי תשלום המסתיים בספרות.d-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
+          return `read=${prompt}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
         }
       }
 
@@ -275,26 +316,62 @@ export async function processManagementFlow(clientData, params, token, env) {
       const credActionCount = mgmt_renew_cred_confirms.length;
 
       if (credActionCount < credSelections) {
-        const statusStr = clientData.autoRenewCredit ? `מופעלת על סך.n-${(clientData.autoRenewCreditAmount || 0) / 100}.t-שקלים` : "כבויה";
-        const actStr = clientData.autoRenewCredit ? "לביטול" : "להפעלה";
         const nextIdx = credActionCount + 1;
-        return `read=t-טעינת פעימות אוטומטית כעת.t-${statusStr}.t-${actStr}.t-הקישו 1.t-לחזרה הקישו כוכבית=mgmt_renew_cred_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
+        if (clientData.autoRenewCredit) {
+          const statusStr = `מופעלת על סך.n-${(clientData.autoRenewCreditAmount || 0) / 100}.t-שקלים`;
+          return `read=t-טעינת פעימות אוטומטית כעת.t-${statusStr}.t-לביטול הקישו 1.t-לשינוי סכום הקישו 2.t-לחזרה הקישו כוכבית=mgmt_renew_cred_confirm_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
+        } else {
+          return `read=t-טעינת פעימות אוטומטית כעת כבויה.t-להפעלה הקישו 1.t-לחזרה הקישו כוכבית=mgmt_renew_cred_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
+        }
       } else {
         const lastConfirm = mgmt_renew_cred_confirms[credActionCount - 1];
-        if (lastConfirm === '1') {
-          // אם הטעינה כבויה, אנחנו מפעילים אותה וצריכים סכום מהלקוח
-          if (!clientData.autoRenewCredit) {
+
+        if (clientData.autoRenewCredit) {
+          if (lastConfirm === '1') { // ביטול
+            const patchPayload = { ...clientData, autoRenewCredit: false, autoRenewCreditAmount: null };
+            const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
+              method: 'PATCH',
+              headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+              body: JSON.stringify(patchPayload)
+            });
+
+            const nextIdx = mgmt_mains.length + 1;
+            const resultText = patchReq.ok
+              ? `t-טעינת פעימות אוטומטית בוטלה בהצלחה`
+              : `t-שגיאה בעדכון ההגדרות`;
+
+            let statusParts = [];
+            if (clientData.autoRenewSubscription) statusParts.push("t-מנוי חודשי");
+            if (clientData.autoRenewLicence) statusParts.push("t-רישיון שנתי");
+
+            let renewText = statusParts.length > 0
+              ? `t-מוגדר חידוש אוטומטי עבור.${statusParts.join(".m-1182.")}`
+              : `t-לא מוגדר חידוש אוטומטי במערכת`;
+
+            let prompt = `t-במערכת שמור אמצעי תשלום המסתיים בספרות.d-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
+            return `id_list_message=$&read=${resultText}.${prompt}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
+
+          } else if (lastConfirm === '2') { // שינוי סכום
             const currentAmountParam = params[`mgmt_cred_amount_${credSelections}`];
 
             if (currentAmountParam === undefined) {
               return `read=t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,NO,,,,,,,,,no`;
             } else if (currentAmountParam === '*') {
-              const nextIdx = mgmt_renews.length + 1;
-              return `read=t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
+              const nextIdx = mgmt_mains.length + 1;
+              let statusParts = [];
+              if (clientData.autoRenewSubscription) statusParts.push("t-מנוי חודשי");
+              if (clientData.autoRenewLicence) statusParts.push("t-רישיון שנתי");
+              if (clientData.autoRenewCredit) statusParts.push("t-פעימות");
+
+              let renewText = statusParts.length > 0
+                ? `t-מוגדר חידוש אוטומטי עבור.${statusParts.join(".m-1182.")}`
+                : `t-לא מוגדר חידוש אוטומטי במערכת`;
+
+              let prompt = `t-במערכת שמור אמצעי תשלום המסתיים בספרות.d-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
+              return `read=${prompt}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
             } else {
               const amountAgorot = parseInt(currentAmountParam, 10) * 100;
               if (isNaN(amountAgorot) || amountAgorot <= 0) {
-                // סכום שגוי, מבקשים שוב
                 return `read=t-סכום שגוי.t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,NO,,,,,,,,,no`;
               }
 
@@ -305,33 +382,100 @@ export async function processManagementFlow(clientData, params, token, env) {
                 body: JSON.stringify(patchPayload)
               });
 
-              const nextIdx = mgmt_renews.length + 1;
+              const nextIdx = mgmt_mains.length + 1;
+              const resultText = patchReq.ok
+                ? `t-סכום טעינת פעימות אוטומטית עודכן בהצלחה לסך.n-${currentAmountParam}.t-שקלים`
+                : `t-שגיאה בעדכון ההגדרות`;
+
+              let statusParts = [];
+              if (clientData.autoRenewSubscription) statusParts.push("t-מנוי חודשי");
+              if (clientData.autoRenewLicence) statusParts.push("t-רישיון שנתי");
+              statusParts.push("t-פעימות");
+
+              let renewText = statusParts.length > 0
+                ? `t-מוגדר חידוש אוטומטי עבור.${statusParts.join(".m-1182.")}`
+                : `t-לא מוגדר חידוש אוטומטי במערכת`;
+
+              let prompt = `t-במערכת שמור אמצעי תשלום המסתיים בספרות.d-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
+              return `id_list_message=$&read=${resultText}.${prompt}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
+            }
+          } else {
+            const nextIdx = mgmt_mains.length + 1;
+            let statusParts = [];
+            if (clientData.autoRenewSubscription) statusParts.push("t-מנוי חודשי");
+            if (clientData.autoRenewLicence) statusParts.push("t-רישיון שנתי");
+            if (clientData.autoRenewCredit) statusParts.push("t-פעימות");
+
+            let renewText = statusParts.length > 0
+              ? `t-מוגדר חידוש אוטומטי עבור.${statusParts.join(".m-1182.")}`
+              : `t-לא מוגדר חידוש אוטומטי במערכת`;
+
+            let prompt = `t-במערכת שמור אמצעי תשלום המסתיים בספרות.d-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
+            return `read=${prompt}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
+          }
+        } else {
+          if (lastConfirm === '1') { // הפעלה
+            const currentAmountParam = params[`mgmt_cred_amount_${credSelections}`];
+
+            if (currentAmountParam === undefined) {
+              return `read=t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,NO,,,,,,,,,no`;
+            } else if (currentAmountParam === '*') {
+              const nextIdx = mgmt_mains.length + 1;
+              let statusParts = [];
+              if (clientData.autoRenewSubscription) statusParts.push("t-מנוי חודשי");
+              if (clientData.autoRenewLicence) statusParts.push("t-רישיון שנתי");
+              if (clientData.autoRenewCredit) statusParts.push("t-פעימות");
+
+              let renewText = statusParts.length > 0
+                ? `t-מוגדר חידוש אוטומטי עבור.${statusParts.join(".m-1182.")}`
+                : `t-לא מוגדר חידוש אוטומטי במערכת`;
+
+              let prompt = `t-במערכת שמור אמצעי תשלום המסתיים בספרות.d-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
+              return `read=${prompt}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
+            } else {
+              const amountAgorot = parseInt(currentAmountParam, 10) * 100;
+              if (isNaN(amountAgorot) || amountAgorot <= 0) {
+                return `read=t-סכום שגוי.t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,NO,,,,,,,,,no`;
+              }
+
+              const patchPayload = { ...clientData, autoRenewCredit: true, autoRenewCreditAmount: amountAgorot };
+              const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
+                method: 'PATCH',
+                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify(patchPayload)
+              });
+
+              const nextIdx = mgmt_mains.length + 1;
               const resultText = patchReq.ok
                 ? `t-טעינת פעימות אוטומטית הופעלה בהצלחה על סך.n-${currentAmountParam}.t-שקלים`
                 : `t-שגיאה בעדכון ההגדרות`;
 
-              return `read=${resultText}.t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
+              let statusParts = [];
+              if (clientData.autoRenewSubscription) statusParts.push("t-מנוי חודשי");
+              if (clientData.autoRenewLicence) statusParts.push("t-רישיון שנתי");
+              statusParts.push("t-פעימות");
+
+              let renewText = statusParts.length > 0
+                ? `t-מוגדר חידוש אוטומטי עבור.${statusParts.join(".m-1182.")}`
+                : `t-לא מוגדר חידוש אוטומטי במערכת`;
+
+              let prompt = `t-במערכת שמור אמצעי תשלום המסתיים בספרות.d-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
+              return `id_list_message=$&read=${resultText}.${prompt}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
             }
           } else {
-            // אם הטעינה מופעלת, אנחנו מבטלים אותה (אין צורך בסכום)
-            const patchPayload = { ...clientData, autoRenewCredit: false, autoRenewCreditAmount: null };
-            const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
-              method: 'PATCH',
-              headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-              body: JSON.stringify(patchPayload)
-            });
+            const nextIdx = mgmt_mains.length + 1;
+            let statusParts = [];
+            if (clientData.autoRenewSubscription) statusParts.push("t-מנוי חודשי");
+            if (clientData.autoRenewLicence) statusParts.push("t-רישיון שנתי");
+            if (clientData.autoRenewCredit) statusParts.push("t-פעימות");
 
-            const nextIdx = mgmt_renews.length + 1;
-            const resultText = patchReq.ok
-              ? `t-טעינת פעימות אוטומטית בוטלה בהצלחה`
-              : `t-שגיאה בעדכון ההגדרות`;
+            let renewText = statusParts.length > 0
+              ? `t-מוגדר חידוש אוטומטי עבור.${statusParts.join(".m-1182.")}`
+              : `t-לא מוגדר חידוש אוטומטי במערכת`;
 
-            return `read=${resultText}.t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
+            let prompt = `t-במערכת שמור אמצעי תשלום המסתיים בספרות.d-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
+            return `read=${prompt}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
           }
-        } else {
-          // ביטול פעולה
-          const nextIdx = mgmt_renews.length + 1;
-          return `read=t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
         }
       }
     }
