@@ -82,7 +82,7 @@ export async function processManagementFlow(clientData, params, token, env) {
         ? `t-מוגדר חידוש אוטומטי עבור.${statusParts.join(".t-ו")}`
         : `t-לא מוגדר חידוש אוטומטי במערכת`;
 
-      let prompt = `read=t-במערכת שמור אמצעי תשלום המסתיים בספרות.n-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
+      let prompt = `read=t-במערכת שמור אמצעי תשלום המסתיים בספרות.d-${currentCard.fourDigits}.${renewText}.t-לניהול אמצעי התשלום הקישו 1.t-לניהול החידוש האוטומטי הקישו 2`;
       return `${prompt}=mgmt_main_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
     }
   }
