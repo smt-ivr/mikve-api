@@ -1,6 +1,7 @@
 import { getValidToken } from './auth.js';
 import { getActiveClient } from './clients.js';
 import { processIvrFlow } from './payment.js';
+import { processManagementFlow } from './management.js'; // הוספנו את הקובץ החדש
 
 export default {
   async fetch(request, env, ctx) {
@@ -33,19 +34,33 @@ export default {
     }
 
     try {
-      // 1. טיפול בטוקן
       const token = await getValidToken(params, env);
-
-      // 2. מציאת הלקוח
       const { clientData, yemotResponse } = await getActiveClient(params, token);
       
-      // אם יש תגובת מערכת (למשל בקשה להקיש ת"ז או בחירת לקוח מכמה אפשרויות)
       if (yemotResponse) {
         return respond(yemotResponse);
       }
 
-      // 3. ניהול תהליך התשלום
-      const finalResponse = await processIvrFlow(clientData, params, token, env);
+      // חילוץ הבחירה בתפריט הראשי כדי לדעת לאן לנתב
+      let main_menus = [];
+      let i = 1;
+      while(params[`main_menu_${i}`] !== undefined) {
+        main_menus.push(params[`main_menu_${i}`]);
+        i++;
+      }
+      
+      let validMainMenus = main_menus.filter(v => ['1','2','3','4'].includes(v));
+      let selectedMenu = validMainMenus.length > 0 ? validMainMenus[validMainMenus.length - 1] : null;
+
+      let finalResponse = "";
+      
+      // הניתוב הגדול: אם בחר 4 הולך לניהול, אחרת (או אם זה התפריט הראשי) הולך לתשלומים
+      if (selectedMenu === '4') {
+        finalResponse = await processManagementFlow(clientData, params, token, env);
+      } else {
+        finalResponse = await processIvrFlow(clientData, params, token, env);
+      }
+
       return respond(finalResponse);
 
     } catch (error) {
