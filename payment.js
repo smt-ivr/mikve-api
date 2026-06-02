@@ -97,7 +97,7 @@ export async function processIvrFlow(clientData, params, token, env) {
 
     let ttsParts = [
       `t-שלום`, `t-${cleanText(`${clientData.firstName} ${clientData.lastName}`)}`,
-      `t-היתרה המעודכנת שלך היא`, `n-${balanceInShekels}`, `t-שקלים`,
+      `t-יתרת הפעימות שלך היא`, `n-${balanceInShekels}`, `t-שקלים`,
       ...subEndParts, ...licExpParts,
       `t-לטעינת פעימות הקישו 1.t-לחידוש מנוי חודשי הקישו 2`
     ];
