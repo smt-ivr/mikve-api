@@ -372,7 +372,7 @@ export async function processManagementFlow(clientData, params, token, env) {
             } else {
               const amountAgorot = parseInt(currentAmountParam, 10) * 100;
               if (isNaN(amountAgorot) || amountAgorot <= 0) {
-                return `read=t-סכום שגוי.t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,NO,,,,,,,,,no`;
+                return `read=t-סכום שגוי.t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,Price,,yes`;
               }
 
               const patchPayload = { ...clientData, autoRenewCredit: true, autoRenewCreditAmount: amountAgorot };
@@ -418,7 +418,7 @@ export async function processManagementFlow(clientData, params, token, env) {
             const currentAmountParam = params[`mgmt_cred_amount_${credSelections}`];
 
             if (currentAmountParam === undefined) {
-              return `read=t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,NO,,,,,,,,,no`;
+              return `read=t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,Price,,yes`;
             } else if (currentAmountParam === '*') {
               const nextIdx = mgmt_mains.length + 1;
               let statusParts = [];
@@ -435,7 +435,7 @@ export async function processManagementFlow(clientData, params, token, env) {
             } else {
               const amountAgorot = parseInt(currentAmountParam, 10) * 100;
               if (isNaN(amountAgorot) || amountAgorot <= 0) {
-                return `read=t-סכום שגוי.t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,NO,,,,,,,,,no`;
+                return `read=t-סכום שגוי.t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,Price,,yes`;
               }
 
               const patchPayload = { ...clientData, autoRenewCredit: true, autoRenewCreditAmount: amountAgorot };
