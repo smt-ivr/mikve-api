@@ -1,10 +1,22 @@
 const BASE_URL = "https://prod.xn--8dbba8a7b.com";
 
+// משיכת פרמטרים רגילה
 function getAllParams(params, prefix) {
   let arr = [];
   let i = 1;
   while(params[`${prefix}_${i}`] !== undefined) {
     arr.push(params[`${prefix}_${i}`]);
+    i++;
+  }
+  return arr;
+}
+
+// משיכת פרמטרים חכמה - מבודדת לפי מחזור הכניסה לתפריט (Cycle)
+function getCycleParams(params, prefix, cycle) {
+  let arr = [];
+  let i = 1;
+  while(params[`${prefix}_c${cycle}_${i}`] !== undefined) {
+    arr.push(params[`${prefix}_c${cycle}_${i}`]);
     i++;
   }
   return arr;
@@ -70,7 +82,7 @@ function getMainMenuPrompt(clientData, currentCard, nextIdx, apiResponsePrefix =
 export async function processManagementFlow(clientData, params, token, env) {
   const clientId = clientData.id;
 
-  // 1. בדיקה אם קיים כרטיס אשראי ללקוח
+  // משיכת סטטוס כרטיס אשראי עדכני בכל כניסה
   const cardsRes = await fetch(`${BASE_URL}/CreditCard/GetByClientId/${clientId}`, {
     headers: { "Authorization": `Bearer ${token}` }
   });
@@ -79,349 +91,284 @@ export async function processManagementFlow(clientData, params, token, env) {
   let currentCard = hasCard ? cards[0] : null;
 
   const mgmt_mains = getAllParams(params, 'mgmt_main');
-  const mgmt_pays = getAllParams(params, 'mgmt_pay');
-  const mgmt_add_confirms = getAllParams(params, 'mgmt_add_confirm');
-  const mgmt_del_confirms = getAllParams(params, 'mgmt_del_confirm');
-  const mgmt_renews = getAllParams(params, 'mgmt_renew');
-  
-  const mgmt_renew_sub_confirms = getAllParams(params, 'mgmt_renew_sub_confirm');
-  const mgmt_renew_lic_confirms = getAllParams(params, 'mgmt_renew_lic_confirm');
-  const mgmt_renew_cred_confirms = getAllParams(params, 'mgmt_renew_cred_confirm');
+  const cycle = mgmt_mains.length; // מייצג באיזה מחזור של התפריט הראשי אנחנו
 
-  const new_cc_numbers = getAllParams(params, 'new_cc_number');
-  const new_cc_exps = getAllParams(params, 'new_cc_exp');
-  const new_cc_cvvs = getAllParams(params, 'new_cc_cvv');
-
-  const isMgmtMain = mgmt_mains.length > 0 && mgmt_mains[mgmt_mains.length - 1] !== '*';
-  const mgmtMainVal = isMgmtMain ? mgmt_mains[mgmt_mains.length - 1] : null;
-
-  // ------------------------------------------------------------------
-  // תפריט ניהול ראשי
-  // ------------------------------------------------------------------
-  if (!isMgmtMain) {
-    const nextIdx = mgmt_mains.length + 1;
-    return getMainMenuPrompt(clientData, currentCard, nextIdx);
+  // אם עוד לא נכנסנו לתפריט מעולם, או שהמשתמש הקיש כוכבית בתפריט הראשי
+  if (cycle === 0 || mgmt_mains[cycle - 1] === '*') {
+    return getMainMenuPrompt(clientData, currentCard, cycle + 1);
   }
+
+  const mgmtMainVal = mgmt_mains[cycle - 1];
 
   // ------------------------------------------------------------------
   // נתיב 1: ניהול אמצעי תשלום
   // ------------------------------------------------------------------
   if (mgmtMainVal === '1') {
-    if (mgmt_pays.length > 0 && mgmt_pays[mgmt_pays.length - 1] === '*') {
-        return getMainMenuPrompt(clientData, currentCard, mgmt_mains.length + 1);
+    const mgmt_pays = getCycleParams(params, 'mgmt_pay', cycle);
+    const mgmt_add_confirms = getCycleParams(params, 'mgmt_add_confirm', cycle);
+    const mgmt_del_confirms = getCycleParams(params, 'mgmt_del_confirm', cycle);
+    const new_cc_numbers = getCycleParams(params, 'new_cc_number', cycle);
+    const new_cc_exps = getCycleParams(params, 'new_cc_exp', cycle);
+    const new_cc_cvvs = getCycleParams(params, 'new_cc_cvv', cycle);
+
+    // חזרה לתפריט ראשי בכל הקשת כוכבית
+    if (mgmt_pays.length > 0 && mgmt_pays[mgmt_pays.length - 1] === '*') return getMainMenuPrompt(clientData, currentCard, cycle + 1);
+    if (mgmt_add_confirms.length > 0 && mgmt_add_confirms[mgmt_add_confirms.length - 1] === '*') return getMainMenuPrompt(clientData, currentCard, cycle + 1);
+    if (mgmt_del_confirms.length > 0 && mgmt_del_confirms[mgmt_del_confirms.length - 1] === '*') return getMainMenuPrompt(clientData, currentCard, cycle + 1);
+    if (new_cc_numbers.length > 0 && new_cc_numbers[new_cc_numbers.length - 1] === '*') return getMainMenuPrompt(clientData, currentCard, cycle + 1);
+    if (new_cc_exps.length > 0 && new_cc_exps[new_cc_exps.length - 1] === '*') return getMainMenuPrompt(clientData, currentCard, cycle + 1);
+    if (new_cc_cvvs.length > 0 && new_cc_cvvs[new_cc_cvvs.length - 1] === '*') return getMainMenuPrompt(clientData, currentCard, cycle + 1);
+
+    if (mgmt_pays.length === 0 && hasCard) {
+        return `read=t-להוספת כרטיס אשראי חדש הקישו 1.t-למחיקת אמצעי התשלום הקיים הקישו 2.t-לחזרה הקישו כוכבית=mgmt_pay_c${cycle}_1,,1,,,NO,,,,12*,,,,,no`;
     }
 
-    const isMgmtPay = mgmt_pays.length > 0 && mgmt_pays[mgmt_pays.length - 1] !== '*';
-    const mgmtPayVal = isMgmtPay ? mgmt_pays[mgmt_pays.length - 1] : null;
+    const action = hasCard ? mgmt_pays[mgmt_pays.length - 1] : '1';
 
-    if (!isMgmtPay && hasCard) {
-      const nextIdx = mgmt_pays.length + 1;
-      return `read=t-להוספת כרטיס אשראי חדש הקישו 1.t-למחיקת אמצעי התשלום הקיים הקישו 2.t-לחזרה הקישו כוכבית=mgmt_pay_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
-    }
-
-    const action = hasCard ? mgmtPayVal : '1'; 
-
-    if (action === '1') { 
-      if (mgmt_add_confirms.length > 0 && mgmt_add_confirms[mgmt_add_confirms.length - 1] === '*') {
-          return getMainMenuPrompt(clientData, currentCard, mgmt_mains.length + 1);
-      }
-
-      const isAddConfirm = mgmt_add_confirms.length > 0 && mgmt_add_confirms[mgmt_add_confirms.length - 1] !== '*';
-      if (!isAddConfirm) {
-        const nextIdx = mgmt_add_confirms.length + 1;
-        return `read=t-שימו לב, יצירת כרטיס חדש תמחק אמצעי תשלום קודמים השמורים במערכת.t-הזנת האשראי משמשת לשמירת הכרטיס בלבד, והמערכת לא תבצע שום חיוב כעת.t-לאישור ומעבר להזנת אשראי הקישו 1.t-לחזרה הקישו כוכבית=mgmt_add_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
-      }
-
-      // חזרה לתפריט ראשי בלחיצה על כוכבית בכל אחד משלבי הכנסת האשראי
-      if (new_cc_numbers.length > 0 && new_cc_numbers[new_cc_numbers.length - 1] === '*') {
-          return getMainMenuPrompt(clientData, currentCard, mgmt_mains.length + 1);
-      }
-      if (new_cc_exps.length > 0 && new_cc_exps[new_cc_exps.length - 1] === '*') {
-          return getMainMenuPrompt(clientData, currentCard, mgmt_mains.length + 1);
-      }
-      if (new_cc_cvvs.length > 0 && new_cc_cvvs[new_cc_cvvs.length - 1] === '*') {
-          return getMainMenuPrompt(clientData, currentCard, mgmt_mains.length + 1);
-      }
-
-      let validCcNumbers = new_cc_numbers.filter(v => v !== '*' && isValidLuhn(v));
-      let isCcNumValid = validCcNumbers.length > new_cc_exps.filter(v => v === '*').length;
-      let currentCcNumber = isCcNumValid ? validCcNumbers[validCcNumbers.length - 1] : null;
-
-      if (!isCcNumValid) {
-        const nextIdx = new_cc_numbers.length + 1;
-        let msg = "m-1422";
-        if (new_cc_numbers.length > 0) {
-          const last = new_cc_numbers[new_cc_numbers.length - 1];
-          if (last !== '*' && !isValidLuhn(last)) msg = "t-מספר כרטיס שגוי.m-1422";
+    if (action === '1') {
+        if (mgmt_add_confirms.length === 0) {
+            return `read=t-שימו לב, יצירת כרטיס חדש תמחק אמצעי תשלום קודמים השמורים במערכת.t-הזנת האשראי משמשת לשמירת הכרטיס בלבד, והמערכת לא תבצע שום חיוב כעת.t-לאישור ומעבר להזנת אשראי הקישו 1.t-לחזרה הקישו כוכבית=mgmt_add_confirm_c${cycle}_1,,1,,,NO,,,,1*,,,,,no`;
         }
-        return `read=${msg}=new_cc_number_${nextIdx},,16,,,NO,,,,,,,,,no`;
-      }
 
-      let validCcExps = new_cc_exps.filter(v => v !== '*' && isValidExp(v));
-      let isCcExpValid = validCcExps.length > new_cc_cvvs.filter(v => v === '*').length;
-      let currentCcExp = isCcExpValid ? validCcExps[validCcExps.length - 1] : null;
-
-      if (!isCcExpValid) {
-        const nextIdx = new_cc_exps.length + 1;
-        let msg = "m-1424";
-        if (new_cc_exps.length > 0) {
-          const last = new_cc_exps[new_cc_exps.length - 1];
-          if (last !== '*' && !isValidExp(last)) msg = "t-תוקף שגוי.m-1424";
+        // מספר כרטיס
+        if (new_cc_numbers.length === 0) {
+             return `read=m-1422=new_cc_number_c${cycle}_1,,16,,,NO,,,,,,,,,no`;
         }
-        return `read=${msg}=new_cc_exp_${nextIdx},,4,,,NO,,,,,,,,,no`;
-      }
+        const lastCcNum = new_cc_numbers[new_cc_numbers.length - 1];
+        if (!isValidLuhn(lastCcNum)) {
+             return `read=t-מספר כרטיס שגוי.m-1422=new_cc_number_c${cycle}_${new_cc_numbers.length + 1},,16,,,NO,,,,,,,,,no`;
+        }
 
-      let validCcCvvs = new_cc_cvvs.filter(v => v !== '*' && v.length >= 3);
-      let isCcCvvValid = validCcCvvs.length > 0;
-      let currentCcCvv = isCcCvvValid ? validCcCvvs[validCcCvvs.length - 1] : null;
+        // תוקף כרטיס
+        if (new_cc_exps.length === 0) {
+             return `read=m-1424=new_cc_exp_c${cycle}_1,,4,,,NO,,,,,,,,,no`;
+        }
+        const lastCcExp = new_cc_exps[new_cc_exps.length - 1];
+        if (!isValidExp(lastCcExp)) {
+             return `read=t-תוקף שגוי.m-1424=new_cc_exp_c${cycle}_${new_cc_exps.length + 1},,4,,,NO,,,,,,,,,no`;
+        }
 
-      if (!isCcCvvValid) {
-        const nextIdx = new_cc_cvvs.length + 1;
-        return `read=m-1428=new_cc_cvv_${nextIdx},,4,3,,NO,,,,,,,,,no`;
-      }
+        // CVV
+        if (new_cc_cvvs.length === 0) {
+             return `read=m-1428=new_cc_cvv_c${cycle}_1,,4,3,,NO,,,,,,,,,no`;
+        }
+        const lastCcCvv = new_cc_cvvs[new_cc_cvvs.length - 1];
+        if (lastCcCvv.length < 3) {
+             return `read=m-1428=new_cc_cvv_c${cycle}_${new_cc_cvvs.length + 1},,4,3,,NO,,,,,,,,,no`;
+        }
 
-      const expMonth = parseInt(currentCcExp.substring(0, 2), 10);
-      const expYear = 2000 + parseInt(currentCcExp.substring(2, 4), 10);
-      const fourDigits = currentCcNumber.substring(currentCcNumber.length - 4);
+        // אם הכל תקין, שומרים אמצעי תשלום
+        const expMonth = parseInt(lastCcExp.substring(0, 2), 10);
+        const expYear = 2000 + parseInt(lastCcExp.substring(2, 4), 10);
+        const fourDigits = lastCcNum.substring(lastCcNum.length - 4);
 
-      const newCardPayload = {
-        clientId: clientId,
-        isEditMode: true,
-        cardNumber: currentCcNumber,
-        expMonth: expMonth,
-        expYear: expYear,
-        cvv: currentCcCvv,
-        personalId: clientData.personalId || "",
-        name: `${clientData.firstName || ''} ${clientData.lastName || ''}`.trim(),
-        fourDigits: fourDigits,
-        paymentMethod: 1
-      };
+        const newCardPayload = {
+            clientId: clientId,
+            isEditMode: true,
+            cardNumber: lastCcNum,
+            expMonth: expMonth,
+            expYear: expYear,
+            cvv: lastCcCvv,
+            personalId: clientData.personalId || "",
+            name: `${clientData.firstName || ''} ${clientData.lastName || ''}`.trim(),
+            fourDigits: fourDigits,
+            paymentMethod: 1
+        };
 
-      const saveReq = await fetch(`${BASE_URL}/CreditCard`, {
-        method: 'POST',
-        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(newCardPayload)
-      });
+        const saveReq = await fetch(`${BASE_URL}/CreditCard`, {
+            method: 'POST',
+            headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify(newCardPayload)
+        });
 
-      if (saveReq.ok) {
-        return getMainMenuPrompt(clientData, { fourDigits }, mgmt_mains.length + 1, "t-אמצעי התשלום נשמר בהצלחה במערכת");
-      } else {
-        return getMainMenuPrompt(clientData, currentCard, mgmt_mains.length + 1, "t-שגיאה בשמירת אמצעי התשלום");
-      }
+        if (saveReq.ok) {
+            return getMainMenuPrompt(clientData, { fourDigits }, cycle + 1, "t-אמצעי התשלום נשמר בהצלחה במערכת");
+        } else {
+            return getMainMenuPrompt(clientData, currentCard, cycle + 1, "t-שגיאה בשמירת אמצעי התשלום");
+        }
 
-    } else if (action === '2') { 
-      if (mgmt_del_confirms.length > 0 && mgmt_del_confirms[mgmt_del_confirms.length - 1] === '*') {
-          return getMainMenuPrompt(clientData, currentCard, mgmt_mains.length + 1);
-      }
+    } else if (action === '2') {
+        if (mgmt_del_confirms.length === 0) {
+            return `read=t-האם אתם בטוחים שברצונכם למחוק את אמצעי התשלום.t-לאישור הקישו 1.t-לחזרה הקישו כוכבית=mgmt_del_confirm_c${cycle}_1,,1,,,NO,,,,1*,,,,,no`;
+        }
 
-      const isDelConfirm = mgmt_del_confirms.length > 0 && mgmt_del_confirms[mgmt_del_confirms.length - 1] !== '*';
-      if (!isDelConfirm) {
-        const nextIdx = mgmt_del_confirms.length + 1;
-        return `read=t-האם אתם בטוחים שברצונכם למחוק את אמצעי התשלום.t-לאישור הקישו 1.t-לחזרה הקישו כוכבית=mgmt_del_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
-      }
+        const delReq = await fetch(`${BASE_URL}/CreditCard/${currentCard.id}`, {
+            method: 'DELETE',
+            headers: { "Authorization": `Bearer ${token}` }
+        });
 
-      const delReq = await fetch(`${BASE_URL}/CreditCard/${currentCard.id}`, {
-        method: 'DELETE',
-        headers: { "Authorization": `Bearer ${token}` }
-      });
-
-      if (delReq.status === 204 || delReq.ok) {
-        return getMainMenuPrompt(clientData, null, mgmt_mains.length + 1, "t-אמצעי התשלום נמחק בהצלחה");
-      } else {
-        return getMainMenuPrompt(clientData, currentCard, mgmt_mains.length + 1, "t-שגיאה במחיקת אמצעי התשלום");
-      }
+        if (delReq.status === 204 || delReq.ok) {
+            return getMainMenuPrompt(clientData, null, cycle + 1, "t-אמצעי התשלום נמחק בהצלחה");
+        } else {
+            return getMainMenuPrompt(clientData, currentCard, cycle + 1, "t-שגיאה במחיקת אמצעי התשלום");
+        }
     }
-  } 
-  
+  }
   // ------------------------------------------------------------------
   // נתיב 2: ניהול החידוש האוטומטי
   // ------------------------------------------------------------------
   else if (mgmtMainVal === '2') {
-    if (mgmt_renews.length > 0 && mgmt_renews[mgmt_renews.length - 1] === '*') {
-        return getMainMenuPrompt(clientData, currentCard, mgmt_mains.length + 1);
+    const mgmt_renews = getCycleParams(params, 'mgmt_renew', cycle);
+    
+    if (mgmt_renews.length > 0 && mgmt_renews[mgmt_renews.length - 1] === '*') return getMainMenuPrompt(clientData, currentCard, cycle + 1);
+
+    if (mgmt_renews.length === 0) {
+        return `read=t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3.t-לחזרה לתפריט הקודם הקישו כוכבית=mgmt_renew_c${cycle}_1,,1,,,NO,,,,123*,,,,,no`;
     }
 
-    const isMgmtRenew = mgmt_renews.length > 0 && mgmt_renews[mgmt_renews.length - 1] !== '*';
-    const mgmtRenewVal = isMgmtRenew ? mgmt_renews[mgmt_renews.length - 1] : null;
-
-    if (!isMgmtRenew) {
-      const nextIdx = mgmt_renews.length + 1;
-      return `read=t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3.t-לחזרה לתפריט הקודם הקישו כוכבית=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
-    }
+    const mgmtRenewVal = mgmt_renews[mgmt_renews.length - 1];
 
     if (mgmtRenewVal === '1') { // מנוי חודשי
-      const subSelections = mgmt_renews.filter(v => v === '1').length;
-      const subActionCount = mgmt_renew_sub_confirms.length;
-
-      if (subActionCount < subSelections) {
-        const statusStr = clientData.autoRenewSubscription ? "מופעל" : "כבוי";
-        const actStr = clientData.autoRenewSubscription ? "לביטול" : "להפעלה";
-        const nextIdx = subActionCount + 1;
-        return `read=t-חידוש מנוי אוטומטי כעת.t-${statusStr}.t-${actStr}.t-הקישו 1.t-לחזרה הקישו כוכבית=mgmt_renew_sub_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
-      } else {
-        const lastConfirm = mgmt_renew_sub_confirms[subActionCount - 1];
-        if (lastConfirm === '1') {
-          const patchPayload = { ...clientData, autoRenewSubscription: !clientData.autoRenewSubscription };
-          const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
-            method: 'PATCH',
-            headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-            body: JSON.stringify(patchPayload)
-          });
-
-          if (patchReq.ok) clientData.autoRenewSubscription = !clientData.autoRenewSubscription;
-
-          const resultText = patchReq.ok
-            ? `t-חידוש מנוי אוטומטי ${clientData.autoRenewSubscription ? "הופעל" : "בוטל"} בהצלחה`
-            : `t-שגיאה בעדכון ההגדרות`;
-
-          return getMainMenuPrompt(clientData, currentCard, mgmt_mains.length + 1, resultText);
-        } else {
-          const nextIdx = mgmt_renews.length + 1;
-          return `read=t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3.t-לחזרה הקישו כוכבית=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
+        const confirms = getCycleParams(params, 'mgmt_renew_sub_confirm', cycle);
+        if (confirms.length > 0 && confirms[confirms.length - 1] === '*') return getMainMenuPrompt(clientData, currentCard, cycle + 1);
+        
+        if (confirms.length === 0) {
+            const statusStr = clientData.autoRenewSubscription ? "מופעל" : "כבוי";
+            const actStr = clientData.autoRenewSubscription ? "לביטול" : "להפעלה";
+            return `read=t-חידוש מנוי אוטומטי כעת.t-${statusStr}.t-${actStr}.t-הקישו 1.t-לחזרה הקישו כוכבית=mgmt_renew_sub_confirm_c${cycle}_1,,1,,,NO,,,,1*,,,,,no`;
         }
-      }
-
-    } else if (mgmtRenewVal === '2') { // רישיון שנתי
-      const licSelections = mgmt_renews.filter(v => v === '2').length;
-      const licActionCount = mgmt_renew_lic_confirms.length;
-
-      if (licActionCount < licSelections) {
-        const statusStr = clientData.autoRenewLicence ? "מופעל" : "כבוי";
-        const actStr = clientData.autoRenewLicence ? "לביטול" : "להפעלה";
-        const nextIdx = licActionCount + 1;
-        return `read=t-חידוש רישיון אוטומטי כעת.t-${statusStr}.t-${actStr}.t-הקישו 1.t-לחזרה הקישו כוכבית=mgmt_renew_lic_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
-      } else {
-        const lastConfirm = mgmt_renew_lic_confirms[licActionCount - 1];
-        if (lastConfirm === '1') {
-          const patchPayload = { ...clientData, autoRenewLicence: !clientData.autoRenewLicence };
-          const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
-            method: 'PATCH',
-            headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-            body: JSON.stringify(patchPayload)
-          });
-
-          if (patchReq.ok) clientData.autoRenewLicence = !clientData.autoRenewLicence;
-
-          const resultText = patchReq.ok
-            ? `t-חידוש רישיון אוטומטי ${clientData.autoRenewLicence ? "הופעל" : "בוטל"} בהצלחה`
-            : `t-שגיאה בעדכון ההגדרות`;
-
-          return getMainMenuPrompt(clientData, currentCard, mgmt_mains.length + 1, resultText);
-        } else {
-          const nextIdx = mgmt_renews.length + 1;
-          return `read=t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3.t-לחזרה הקישו כוכבית=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
-        }
-      }
-
-    } else if (mgmtRenewVal === '3') { // פעימות
-      const credSelections = mgmt_renews.filter(v => v === '3').length;
-      const credActionCount = mgmt_renew_cred_confirms.length;
-
-      if (credActionCount < credSelections) {
-        const nextIdx = credActionCount + 1;
-        if (clientData.autoRenewCredit) {
-          const statusStr = `מופעלת על סך.n-${(clientData.autoRenewCreditAmount || 0) / 100}.t-שקלים`;
-          return `read=t-טעינת פעימות אוטומטית כעת.t-${statusStr}.t-לביטול הקישו 1.t-לשינוי סכום הקישו 2.t-לחזרה הקישו כוכבית=mgmt_renew_cred_confirm_${nextIdx},,1,,,NO,,,,12*,,,,,no`;
-        } else {
-          return `read=t-טעינת פעימות אוטומטית כעת כבויה.t-להפעלה הקישו 1.t-לחזרה הקישו כוכבית=mgmt_renew_cred_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
-        }
-      } else {
-        const lastConfirm = mgmt_renew_cred_confirms[credActionCount - 1];
-
-        if (clientData.autoRenewCredit) {
-          if (lastConfirm === '1') { // ביטול
-            const patchPayload = { ...clientData, autoRenewCredit: false, autoRenewCreditAmount: null };
+        
+        if (confirms[0] === '1') {
+            const patchPayload = { ...clientData, autoRenewSubscription: !clientData.autoRenewSubscription };
             const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
-              method: 'PATCH',
-              headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-              body: JSON.stringify(patchPayload)
+                method: 'PATCH',
+                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify(patchPayload)
             });
 
-            if (patchReq.ok) {
-               clientData.autoRenewCredit = false;
-               clientData.autoRenewCreditAmount = null;
-            }
+            if (patchReq.ok) clientData.autoRenewSubscription = !clientData.autoRenewSubscription;
 
             const resultText = patchReq.ok
-              ? `t-טעינת פעימות אוטומטית בוטלה בהצלחה`
-              : `t-שגיאה בעדכון ההגדרות`;
-
-            return getMainMenuPrompt(clientData, currentCard, mgmt_mains.length + 1, resultText);
-
-          } else if (lastConfirm === '2') { // שינוי סכום
-            const currentAmountParam = params[`mgmt_cred_amount_${credSelections}`];
-
-            if (currentAmountParam === undefined) {
-              return `read=t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,Number`;
-            } else if (currentAmountParam === '*') {
-              const nextIdx = mgmt_renews.length + 1;
-              return `read=t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3.t-לחזרה הקישו כוכבית=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
-            } else {
-              const amountAgorot = parseInt(currentAmountParam, 10) * 100;
-              if (isNaN(amountAgorot) || amountAgorot <= 0) {
-                return `read=t-סכום שגוי.t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,Number`;
-              }
-
-              const patchPayload = { ...clientData, autoRenewCredit: true, autoRenewCreditAmount: amountAgorot };
-              const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
-                method: 'PATCH',
-                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-                body: JSON.stringify(patchPayload)
-              });
-
-              if (patchReq.ok) {
-                 clientData.autoRenewCreditAmount = amountAgorot;
-              }
-
-              const resultText = patchReq.ok
-                ? `t-סכום טעינת פעימות אוטומטית עודכן בהצלחה לסך.n-${currentAmountParam}.t-שקלים`
+                ? `t-חידוש מנוי אוטומטי ${clientData.autoRenewSubscription ? "הופעל" : "בוטל"} בהצלחה`
                 : `t-שגיאה בעדכון ההגדרות`;
 
-              return getMainMenuPrompt(clientData, currentCard, mgmt_mains.length + 1, resultText);
-            }
-          } else {
-            const nextIdx = mgmt_renews.length + 1;
-            return `read=t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3.t-לחזרה הקישו כוכבית=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
-          }
-        } else {
-          if (lastConfirm === '1') { // הפעלה
-            const currentAmountParam = params[`mgmt_cred_amount_${credSelections}`];
-
-            if (currentAmountParam === undefined) {
-              return `read=t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,Number`;
-            } else if (currentAmountParam === '*') {
-              const nextIdx = mgmt_renews.length + 1;
-              return `read=t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3.t-לחזרה הקישו כוכבית=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
-            } else {
-              const amountAgorot = parseInt(currentAmountParam, 10) * 100;
-              if (isNaN(amountAgorot) || amountAgorot <= 0) {
-                return `read=t-סכום שגוי.t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_${credSelections},,4,,,Number`;
-              }
-
-              const patchPayload = { ...clientData, autoRenewCredit: true, autoRenewCreditAmount: amountAgorot };
-              const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
-                method: 'PATCH',
-                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-                body: JSON.stringify(patchPayload)
-              });
-
-              if (patchReq.ok) {
-                 clientData.autoRenewCredit = true;
-                 clientData.autoRenewCreditAmount = amountAgorot;
-              }
-
-              const resultText = patchReq.ok
-                ? `t-טעינת פעימות אוטומטית הופעלה בהצלחה על סך.n-${currentAmountParam}.t-שקלים`
-                : `t-שגיאה בעדכון ההגדרות`;
-
-              return getMainMenuPrompt(clientData, currentCard, mgmt_mains.length + 1, resultText);
-            }
-          } else {
-            const nextIdx = mgmt_renews.length + 1;
-            return `read=t-לניהול חידוש אוטומטי למנוי הקישו 1.t-לניהול חידוש אוטומטי לרישיון הקישו 2.t-לניהול טעינת פעימות אוטומטית הקישו 3.t-לחזרה הקישו כוכבית=mgmt_renew_${nextIdx},,1,,,NO,,,,123*,,,,,no`;
-          }
+            return getMainMenuPrompt(clientData, currentCard, cycle + 1, resultText);
         }
-      }
+
+    } else if (mgmtRenewVal === '2') { // רישיון שנתי
+        const confirms = getCycleParams(params, 'mgmt_renew_lic_confirm', cycle);
+        if (confirms.length > 0 && confirms[confirms.length - 1] === '*') return getMainMenuPrompt(clientData, currentCard, cycle + 1);
+
+        if (confirms.length === 0) {
+            const statusStr = clientData.autoRenewLicence ? "מופעל" : "כבוי";
+            const actStr = clientData.autoRenewLicence ? "לביטול" : "להפעלה";
+            return `read=t-חידוש רישיון אוטומטי כעת.t-${statusStr}.t-${actStr}.t-הקישו 1.t-לחזרה הקישו כוכבית=mgmt_renew_lic_confirm_c${cycle}_1,,1,,,NO,,,,1*,,,,,no`;
+        }
+
+        if (confirms[0] === '1') {
+            const patchPayload = { ...clientData, autoRenewLicence: !clientData.autoRenewLicence };
+            const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
+                method: 'PATCH',
+                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify(patchPayload)
+            });
+
+            if (patchReq.ok) clientData.autoRenewLicence = !clientData.autoRenewLicence;
+
+            const resultText = patchReq.ok
+                ? `t-חידוש רישיון אוטומטי ${clientData.autoRenewLicence ? "הופעל" : "בוטל"} בהצלחה`
+                : `t-שגיאה בעדכון ההגדרות`;
+
+            return getMainMenuPrompt(clientData, currentCard, cycle + 1, resultText);
+        }
+
+    } else if (mgmtRenewVal === '3') { // פעימות
+        const confirms = getCycleParams(params, 'mgmt_renew_cred_confirm', cycle);
+        const amounts = getCycleParams(params, 'mgmt_cred_amount', cycle);
+        
+        if (confirms.length > 0 && confirms[confirms.length - 1] === '*') return getMainMenuPrompt(clientData, currentCard, cycle + 1);
+        if (amounts.length > 0 && amounts[amounts.length - 1] === '*') return getMainMenuPrompt(clientData, currentCard, cycle + 1);
+
+        if (confirms.length === 0) {
+            if (clientData.autoRenewCredit) {
+                const statusStr = `מופעלת על סך.n-${(clientData.autoRenewCreditAmount || 0) / 100}.t-שקלים`;
+                return `read=t-טעינת פעימות אוטומטית כעת.t-${statusStr}.t-לביטול הקישו 1.t-לשינוי סכום הקישו 2.t-לחזרה הקישו כוכבית=mgmt_renew_cred_confirm_c${cycle}_1,,1,,,NO,,,,12*,,,,,no`;
+            } else {
+                return `read=t-טעינת פעימות אוטומטית כעת כבויה.t-להפעלה הקישו 1.t-לחזרה הקישו כוכבית=mgmt_renew_cred_confirm_c${cycle}_1,,1,,,NO,,,,1*,,,,,no`;
+            }
+        }
+        
+        const lastConfirm = confirms[confirms.length - 1];
+        
+        if (clientData.autoRenewCredit) { // טעינה כעת מופעלת
+            if (lastConfirm === '1') {
+                // ביטול פעימות
+                const patchPayload = { ...clientData, autoRenewCredit: false, autoRenewCreditAmount: null };
+                const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
+                    method: 'PATCH',
+                    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                    body: JSON.stringify(patchPayload)
+                });
+
+                if (patchReq.ok) {
+                    clientData.autoRenewCredit = false;
+                    clientData.autoRenewCreditAmount = null;
+                }
+
+                const resultText = patchReq.ok
+                    ? `t-טעינת פעימות אוטומטית בוטלה בהצלחה`
+                    : `t-שגיאה בעדכון ההגדרות`;
+
+                return getMainMenuPrompt(clientData, currentCard, cycle + 1, resultText);
+            } else if (lastConfirm === '2') {
+                // שינוי סכום (Type: Number)
+                if (amounts.length === 0) {
+                    return `read=t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_c${cycle}_1,,4,,,Number`;
+                }
+                const amountStr = amounts[amounts.length - 1];
+                const amountAgorot = parseInt(amountStr, 10) * 100;
+                
+                if (isNaN(amountAgorot) || amountAgorot <= 0) {
+                    return `read=t-סכום שגוי.t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_c${cycle}_${amounts.length + 1},,4,,,Number`;
+                }
+                
+                const patchPayload = { ...clientData, autoRenewCredit: true, autoRenewCreditAmount: amountAgorot };
+                const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
+                    method: 'PATCH',
+                    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                    body: JSON.stringify(patchPayload)
+                });
+
+                if (patchReq.ok) clientData.autoRenewCreditAmount = amountAgorot;
+
+                const resultText = patchReq.ok
+                    ? `t-סכום טעינת פעימות אוטומטית עודכן בהצלחה לסך.n-${amountStr}.t-שקלים`
+                    : `t-שגיאה בעדכון ההגדרות`;
+
+                return getMainMenuPrompt(clientData, currentCard, cycle + 1, resultText);
+            }
+        } else { // טעינה כעת כבויה
+            if (lastConfirm === '1') {
+                // הפעלת פעימות וקבלת סכום (Type: Number)
+                if (amounts.length === 0) {
+                    return `read=t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_c${cycle}_1,,4,,,Number`;
+                }
+                const amountStr = amounts[amounts.length - 1];
+                const amountAgorot = parseInt(amountStr, 10) * 100;
+                
+                if (isNaN(amountAgorot) || amountAgorot <= 0) {
+                    return `read=t-סכום שגוי.t-נא להקיש את הסכום בשקלים לטעינה חודשית, ובסיום סולמית=mgmt_cred_amount_c${cycle}_${amounts.length + 1},,4,,,Number`;
+                }
+                
+                const patchPayload = { ...clientData, autoRenewCredit: true, autoRenewCreditAmount: amountAgorot };
+                const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
+                    method: 'PATCH',
+                    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                    body: JSON.stringify(patchPayload)
+                });
+
+                if (patchReq.ok) {
+                    clientData.autoRenewCredit = true;
+                    clientData.autoRenewCreditAmount = amountAgorot;
+                }
+
+                const resultText = patchReq.ok
+                    ? `t-טעינת פעימות אוטומטית הופעלה בהצלחה על סך.n-${amountStr}.t-שקלים`
+                    : `t-שגיאה בעדכון ההגדרות`;
+
+                return getMainMenuPrompt(clientData, currentCard, cycle + 1, resultText);
+            }
+        }
     }
   }
 
