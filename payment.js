@@ -224,7 +224,7 @@ export async function processIvrFlow(clientData, params, token, env) {
 
     if (!isAmountAccepted) {
       const nextIdx = lic_confirms.length + 1;
-      return `read=t-הרשיון הוא.t-שנתי.t-הרישיון יחודש עד תאריך.dateH-${formattedNewLicDate}.t-בסך.n-${priceShekels}.t-שקלים.t-לאישור ומעבר לתשלום הקישו 1=lic_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
+      return `read=t-חידוש רשיון שנתי בסך.n-${priceShekels}.t-שקלים.t-הרישיון יחודש עד תאריך.dateH-${formattedNewLicDate}.t-לאישור ומעבר לתשלום הקישו 1=lic_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
     }
     finalAmountAgorot = priceAgorot;
   }
