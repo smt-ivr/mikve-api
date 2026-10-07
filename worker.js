@@ -1,4 +1,3 @@
-// worker.js
 import { handleSaasRequest } from './saas-api.js';
 import { getValidToken } from './auth.js';
 import { getActiveClient } from './clients.js';
@@ -18,10 +17,10 @@ export default {
       });
     }
 
-    if (path.startsWith('/mikve/saas')) {
+    if (path.startsWith('/mikve/api')) {
       const corsHeaders = {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+        "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization"
       };
       
