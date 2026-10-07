@@ -1,4 +1,4 @@
-// worker.js
+import { handleSaasRequest } from './saas-api.js';
 import { getValidToken } from './auth.js';
 import { getActiveClient } from './clients.js';
 import { processIvrFlow } from './payment.js';
@@ -8,8 +8,25 @@ import { processTerminalFlow } from './terminals.js';
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    let params = {};
 
+    // ניתוב נפרד לפאנל ניהול הלקוחות עם תמיכה ב-CORS
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization"
+    };
+
+    if (url.pathname.startsWith('/saas')) {
+      if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+      
+      const response = await handleSaasRequest(request, env);
+      const responseHeaders = new Headers(response.headers);
+      for (const [key, value] of Object.entries(corsHeaders)) responseHeaders.set(key, value);
+      
+      return new Response(response.body, { status: response.status, headers: responseHeaders });
+    }
+
+    let params = {};
     if (request.method === 'GET') {
       for (const [key, value] of url.searchParams.entries()) {
         params[key] = value;
@@ -30,20 +47,36 @@ export default {
       }
     }
 
-    if (!params.user || !params.pass || !params.club) {
-      return respond("id_list_message=t-שגיאה חסרים פרטי התחברות למערכת");
+    // קבלת פרטי ההתחברות האמיתיים לפי הטוקן שהוזן בשלוחה
+    const userToken = params.token;
+    if (!userToken) {
+       return respond("id_list_message=t-שגיאה חסר מזהה מערכת");
     }
+
+    let clubCreds;
+    try {
+        clubCreds = await env.DB.prepare("SELECT target_club_id, target_username, target_password FROM saas_tokens WHERE token = ?").bind(userToken).first();
+    } catch(e) {
+        return respond("id_list_message=t-שגיאה במסד הנתונים");
+    }
+
+    if (!clubCreds) {
+        return respond("id_list_message=t-שגיאה מזהה מערכת לא חוקי");
+    }
+
+    // השתלת הנתונים האמיתיים למשתני המערכת
+    params.club = clubCreds.target_club_id;
+    params.user = clubCreds.target_username;
+    params.pass = clubCreds.target_password;
 
     try {
       const token = await getValidToken(params, env);
 
-      // ניתוב לשלוחת המסופים
       if (url.pathname.includes('/terminal')) {
         const terminalResponse = await processTerminalFlow(params, token, env);
         return respond(terminalResponse);
       }
 
-      // הניתוב הרגיל לתשלומים וניהול לקוחות
       const { clientData, yemotResponse } = await getActiveClient(params, token);
       
       if (yemotResponse) {
