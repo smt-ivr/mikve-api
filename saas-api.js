@@ -2,6 +2,7 @@ export async function handleSaasRequest(request, env) {
   const url = new URL(request.url);
   const apiIndex = url.pathname.indexOf('/api');
   const path = apiIndex !== -1 ? url.pathname.substring(apiIndex + 4) : url.pathname;
+  const parts = path.split('/');
 
   const jsonResponse = (data, status = 200) => 
     new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
@@ -40,8 +41,9 @@ export async function handleSaasRequest(request, env) {
     return jsonResponse({ success: true, user: currentUser });
   }
 
+  // הצגת הטוקנים כולל פרטי ההתחברות ללקוח
   if (request.method === 'GET' && path === '/tokens') {
-    const { results } = await env.DB.prepare("SELECT id, token, target_club_id, label, created_at FROM saas_tokens WHERE user_id = ?").bind(currentUser.id).all();
+    const { results } = await env.DB.prepare("SELECT id, token, target_club_id, target_username, target_password, label, created_at FROM saas_tokens WHERE user_id = ?").bind(currentUser.id).all();
     return jsonResponse({ success: true, tokens: results });
   }
 
@@ -59,6 +61,15 @@ export async function handleSaasRequest(request, env) {
       .run();
 
     return jsonResponse({ success: true, token: newToken });
+  }
+
+  // עדכון פרטי טוקן קיים
+  if (request.method === 'POST' && parts[1] === 'tokens' && parts[3] === 'update') {
+    const tokenId = parts[2];
+    const { club_id, username, password, label } = await request.json();
+    await env.DB.prepare("UPDATE saas_tokens SET target_club_id = ?, target_username = ?, target_password = ?, label = ? WHERE id = ? AND user_id = ?")
+      .bind(club_id, username, password, label, tokenId, currentUser.id).run();
+    return jsonResponse({ success: true, message: "הטוקן עודכן בהצלחה" });
   }
 
   if (request.method === 'DELETE' && path.startsWith('/tokens/')) {
@@ -82,6 +93,9 @@ export async function handleSaasRequest(request, env) {
     return jsonResponse({ success: true, logs: results });
   }
 
+  // ----------------------------------------------------
+  // אזור ניהול - למנהלים בלבד
+  // ----------------------------------------------------
   if (!currentUser.is_admin) {
      return jsonResponse({ success: false, message: "נתיב לא נמצא" }, 404);
   }
@@ -119,14 +133,12 @@ export async function handleSaasRequest(request, env) {
     return jsonResponse({ success: true, tokens: results });
   }
 
-  if (request.method === 'PATCH' && path.startsWith('/admin/tokens/')) {
-    const parts = path.split('/');
-    if (parts[3] === 'transfer') {
-      const tokenId = parts[2];
-      const { new_user_id } = await request.json();
-      await env.DB.prepare("UPDATE saas_tokens SET user_id = ? WHERE id = ?").bind(new_user_id, tokenId).run();
-      return jsonResponse({ success: true, message: "הטוקן הועבר בהצלחה" });
-    }
+  // העברת טוקן (POST במקום PATCH)
+  if (request.method === 'POST' && parts[1] === 'admin' && parts[2] === 'tokens' && parts[4] === 'transfer') {
+    const tokenId = parts[3];
+    const { new_user_id } = await request.json();
+    await env.DB.prepare("UPDATE saas_tokens SET user_id = ? WHERE id = ?").bind(new_user_id, tokenId).run();
+    return jsonResponse({ success: true, message: "הטוקן הועבר בהצלחה" });
   }
 
   return jsonResponse({ success: false, message: "נתיב לא נמצא" }, 404);
