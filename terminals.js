@@ -21,6 +21,7 @@ function getAllParams(params, prefix) {
 export async function processTerminalFlow(params, token, env) {
   const clubId = params.club;
   const username = params.user;
+  const apiPhone = params.ApiPhone || "";
 
   const terminal_choices = getAllParams(params, 'terminal');
   const action_choices = getAllParams(params, 'action');
@@ -137,8 +138,8 @@ export async function processTerminalFlow(params, token, env) {
 
   const statusLog = actionReq.ok ? 'SUCCESS' : 'FAILED';
 
-  await env.DB.prepare("INSERT INTO terminal_logs (club_id, username, terminal_id, action_name, status) VALUES (?, ?, ?, ?, ?)")
-    .bind(clubId, username, selectedTerminal.id, actionName, statusLog)
+  await env.DB.prepare("INSERT INTO terminal_logs (club_id, username, terminal_id, action_name, status, api_phone) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(clubId, username, selectedTerminal.id, actionName, statusLog, apiPhone)
     .run();
 
   if (actionReq.ok) {
