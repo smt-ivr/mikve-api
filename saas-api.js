@@ -1,3 +1,4 @@
+// saas-api.js
 export async function handleSaasRequest(request, env) {
   const url = new URL(request.url);
   const apiIndex = url.pathname.indexOf('/api');
@@ -108,6 +109,25 @@ export async function handleSaasRequest(request, env) {
     await env.DB.prepare("UPDATE saas_users SET max_tokens = ?, can_view_history = ?, can_use_payment = ?, can_use_terminal = ? WHERE id = ?")
       .bind(max_tokens, can_view_history ? 1 : 0, can_use_payment ? 1 : 0, can_use_terminal ? 1 : 0, targetUserId).run();
     return jsonResponse({ success: true, message: "הגדרות לקוח עודכנו" });
+  }
+
+  if (request.method === 'GET' && path === '/admin/tokens') {
+    const { results } = await env.DB.prepare(`
+      SELECT t.id, t.user_id, t.token, t.target_club_id, t.target_username, t.target_password, t.label, t.created_at, u.email as owner_email
+      FROM saas_tokens t
+      JOIN saas_users u ON t.user_id = u.id
+    `).all();
+    return jsonResponse({ success: true, tokens: results });
+  }
+
+  if (request.method === 'PATCH' && path.startsWith('/admin/tokens/')) {
+    const parts = path.split('/');
+    if (parts[3] === 'transfer') {
+      const tokenId = parts[2];
+      const { new_user_id } = await request.json();
+      await env.DB.prepare("UPDATE saas_tokens SET user_id = ? WHERE id = ?").bind(new_user_id, tokenId).run();
+      return jsonResponse({ success: true, message: "הטוקן הועבר בהצלחה" });
+    }
   }
 
   return jsonResponse({ success: false, message: "נתיב לא נמצא" }, 404);
