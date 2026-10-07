@@ -1,14 +1,15 @@
+// worker.js
 import { getValidToken } from './auth.js';
 import { getActiveClient } from './clients.js';
 import { processIvrFlow } from './payment.js';
-import { processManagementFlow } from './management.js'; // הוספנו את הקובץ החדש
+import { processManagementFlow } from './management.js';
+import { processTerminalFlow } from './terminals.js';
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     let params = {};
 
-    // חילוץ פרמטרים
     if (request.method === 'GET') {
       for (const [key, value] of url.searchParams.entries()) {
         params[key] = value;
@@ -25,23 +26,30 @@ export default {
           params = await request.json();
         }
       } catch (e) {
-        return respond("id_list_message=t-שגיאה, פורמט בקשה לא תקין");
+        return respond("id_list_message=t-שגיאה פורמט בקשה לא תקין");
       }
     }
 
     if (!params.user || !params.pass || !params.club) {
-      return respond("id_list_message=t-שגיאה, חסרים פרטי התחברות למערכת");
+      return respond("id_list_message=t-שגיאה חסרים פרטי התחברות למערכת");
     }
 
     try {
       const token = await getValidToken(params, env);
+
+      // ניתוב לשלוחת המסופים
+      if (url.pathname.includes('/terminal')) {
+        const terminalResponse = await processTerminalFlow(params, token, env);
+        return respond(terminalResponse);
+      }
+
+      // הניתוב הרגיל לתשלומים וניהול לקוחות
       const { clientData, yemotResponse } = await getActiveClient(params, token);
       
       if (yemotResponse) {
         return respond(yemotResponse);
       }
 
-      // חילוץ הבחירה בתפריט הראשי כדי לדעת לאן לנתב
       let main_menus = [];
       let i = 1;
       while(params[`main_menu_${i}`] !== undefined) {
@@ -54,7 +62,6 @@ export default {
 
       let finalResponse = "";
       
-      // הניתוב הגדול: אם בחר 4 הולך לניהול, אחרת (או אם זה התפריט הראשי) הולך לתשלומים
       if (selectedMenu === '4') {
         finalResponse = await processManagementFlow(clientData, params, token, env);
       } else {
@@ -64,7 +71,7 @@ export default {
       return respond(finalResponse);
 
     } catch (error) {
-      return respond(`id_list_message=t-שגיאה במערכת: ${error.message.replace(/[\.\-]/g, ' ')}`);
+      return respond(`id_list_message=t-שגיאה במערכת ${error.message.replace(/[\.\-]/g, ' ')}`);
     }
   }
 };
