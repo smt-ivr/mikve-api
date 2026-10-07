@@ -63,13 +63,26 @@ export default {
 
       let clubCreds;
       try {
-          clubCreds = await env.DB.prepare("SELECT target_club_id, target_username, target_password FROM saas_tokens WHERE token = ?").bind(userToken).first();
+          clubCreds = await env.DB.prepare(`
+              SELECT t.target_club_id, t.target_username, t.target_password, u.can_use_payment, u.can_use_terminal 
+              FROM saas_tokens t 
+              JOIN saas_users u ON t.user_id = u.id 
+              WHERE t.token = ?
+          `).bind(userToken).first();
       } catch(e) {
           return respond("id_list_message=t-שגיאה במסד הנתונים");
       }
 
       if (!clubCreds) {
           return respond("id_list_message=t-שגיאה מזהה מערכת לא חוקי");
+      }
+
+      if (path === '/mikve/yemot/terminal' && !clubCreds.can_use_terminal) {
+          return respond("id_list_message=t-אין לחשבון זה הרשאה למערכת פתיחת דלתות");
+      }
+
+      if (path === '/mikve/yemot' && !clubCreds.can_use_payment) {
+          return respond("id_list_message=t-אין לחשבון זה הרשאה למערכת סליקת אשראי");
       }
 
       params.club = clubCreds.target_club_id;
