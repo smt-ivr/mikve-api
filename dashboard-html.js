@@ -15,8 +15,8 @@ export const dashboardHTML = `<!DOCTYPE html>
         .login-box h2 { margin-bottom: 20px; color: var(--primary-color); }
         .form-control { margin-bottom: 15px; text-align: right; }
         .form-control label { display: block; margin-bottom: 5px; font-weight: bold; }
-        .form-control input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; }
-        .btn { width: 100%; padding: 10px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; transition: 0.3s; }
+        .form-control input, .form-control select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; }
+        .btn { width: 100%; padding: 10px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; transition: 0.3s; margin-top: 5px; }
         .btn-primary { background-color: var(--secondary-color); color: white; }
         .btn-primary:hover { background-color: #2980b9; }
         .btn-danger { background-color: var(--accent-color); color: white; width: auto; padding: 5px 10px; font-size: 14px;}
@@ -51,6 +51,15 @@ export const dashboardHTML = `<!DOCTYPE html>
         .status-failed { color: red; font-weight: bold; }
         .checkbox-group { display: flex; align-items: center; gap: 5px; }
         .checkbox-group input { width: auto; }
+
+        /* חלוניות צפות (Modals) */
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; padding: 25px; border-radius: 8px; width: 350px; max-width: 90%; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .modal-content h3 { color: var(--primary-color); margin-bottom: 15px; text-align: center; }
+        .modal-content .form-control { margin-bottom: 10px; }
+        .modal-content input, .modal-content select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 15px; }
+        .modal-actions .btn { margin-top: 0; flex: 1; }
     </style>
 </head>
 <body>
@@ -103,7 +112,7 @@ export const dashboardHTML = `<!DOCTYPE html>
                 <div class="card">
                     <h3>הטוקנים הפעילים שלי</h3>
                     <table>
-                        <thead><tr><th>שם מזהה</th><th>Club ID</th><th>טוקן לימות המשיח</th><th>תאריך יצירה</th><th>פעולות</th></tr></thead>
+                        <thead><tr><th>שם מזהה</th><th>Club ID</th><th>שם משתמש API</th><th>סיסמת API</th><th>טוקן לימות המשיח</th><th>פעולות</th></tr></thead>
                         <tbody id="tokens-table-body"></tbody>
                     </table>
                 </div>
@@ -155,6 +164,37 @@ export const dashboardHTML = `<!DOCTYPE html>
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="edit-token-modal" class="modal hidden">
+       <div class="modal-content">
+           <h3>עריכת פרטי מערכת</h3>
+           <input type="hidden" id="edit-tk-id">
+           <div class="form-control"><label>שם מזהה</label><input type="text" id="edit-tk-label"></div>
+           <div class="form-control"><label>Club ID</label><input type="text" id="edit-tk-club"></div>
+           <div class="form-control"><label>שם משתמש API</label><input type="text" id="edit-tk-user"></div>
+           <div class="form-control"><label>סיסמת API</label><input type="text" id="edit-tk-pass"></div>
+           <div class="modal-actions">
+               <button class="btn btn-primary" onclick="saveTokenEdit()">שמור שינויים</button>
+               <button class="btn btn-danger" onclick="closeModals()">ביטול</button>
+           </div>
+       </div>
+    </div>
+
+    <div id="transfer-modal" class="modal hidden">
+       <div class="modal-content">
+           <h3>העברת בעלות על טוקן</h3>
+           <input type="hidden" id="transfer-tk-id">
+           <div class="form-control">
+               <label>בחר לקוח חדש:</label>
+               <select id="transfer-user-select"></select>
+           </div>
+           <div class="modal-actions">
+               <button class="btn btn-primary" onclick="confirmTransfer()">העבר עכשיו</button>
+               <button class="btn btn-danger" onclick="closeModals()">ביטול</button>
+           </div>
+       </div>
     </div>
 
     <script>
@@ -239,16 +279,29 @@ export const dashboardHTML = `<!DOCTYPE html>
             else if(tabId === 'admin-tokens-view') { document.getElementById('page-title').innerText = 'כל הטוקנים במערכת'; loadAdminTokens(); }
         }
 
+        function closeModals() {
+            document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
+        }
+
         async function loadTokens() {
             const data = await apiRequest('/tokens');
             const tbody = document.getElementById('tokens-table-body');
             tbody.innerHTML = '';
             if (data.tokens && data.tokens.length > 0) {
                 data.tokens.forEach(t => {
-                    const date = new Date(t.created_at).toLocaleDateString('he-IL');
-                    tbody.innerHTML += \`<tr><td>\${t.label}</td><td>\${t.target_club_id}</td><td><span class="token-string">\${t.token}</span></td><td>\${date}</td><td><button class="btn btn-danger btn-sm" onclick="deleteToken(\${t.id})"><i class="fas fa-trash"></i> מחיקה</button></td></tr>\`;
+                    tbody.innerHTML += \`<tr>
+                        <td>\${t.label}</td>
+                        <td>\${t.target_club_id}</td>
+                        <td>\${t.target_username}</td>
+                        <td>\${t.target_password}</td>
+                        <td><span class="token-string">\${t.token}</span></td>
+                        <td>
+                            <button class="btn btn-primary btn-sm" onclick="editToken(\${t.id}, '\${t.label}', '\${t.target_club_id}', '\${t.target_username}', '\${t.target_password}')"><i class="fas fa-edit"></i> ערוך</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteToken(\${t.id})"><i class="fas fa-trash"></i> מחיקה</button>
+                        </td>
+                    </tr>\`;
                 });
-            } else tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">אין טוקנים פעילים במערכת.</td></tr>';
+            } else tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">אין טוקנים פעילים במערכת.</td></tr>';
         }
 
         async function createToken() {
@@ -265,6 +318,26 @@ export const dashboardHTML = `<!DOCTYPE html>
                 document.getElementById('tk-user').value = ''; document.getElementById('tk-pass').value = '';
                 loadTokens();
             } else alert(data.message);
+        }
+
+        function editToken(id, label, club, user, pass) {
+            document.getElementById('edit-tk-id').value = id;
+            document.getElementById('edit-tk-label').value = label;
+            document.getElementById('edit-tk-club').value = club;
+            document.getElementById('edit-tk-user').value = user;
+            document.getElementById('edit-tk-pass').value = pass;
+            document.getElementById('edit-token-modal').classList.remove('hidden');
+        }
+
+        async function saveTokenEdit() {
+            const id = document.getElementById('edit-tk-id').value;
+            const label = document.getElementById('edit-tk-label').value;
+            const club_id = document.getElementById('edit-tk-club').value;
+            const username = document.getElementById('edit-tk-user').value;
+            const password = document.getElementById('edit-tk-pass').value;
+            
+            const data = await apiRequest(\`/tokens/\${id}/update\`, { method: 'POST', body: JSON.stringify({ label, club_id, username, password }) });
+            if (data.success) { closeModals(); loadTokens(); } else alert("שגיאה בעדכון: " + data.message);
         }
 
         async function deleteToken(id) {
@@ -352,17 +425,40 @@ export const dashboardHTML = `<!DOCTYPE html>
                         <td>\${t.target_username}</td>
                         <td>\${t.target_password}</td>
                         <td><span class="token-string" style="font-size:11px;">\${t.token}</span></td>
-                        <td><button class="btn btn-primary btn-sm" onclick="transferToken(\${t.id})">העבר בעלות</button></td>
+                        <td><button class="btn btn-primary btn-sm" onclick="openTransferModal(\${t.id})">העבר בעלות</button></td>
                     </tr>\`;
                 });
             } else tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">אין טוקנים פעילים במערכת.</td></tr>';
         }
 
-        async function transferToken(id) {
-            const newUserId = prompt("הכנס את מזהה הלקוח (ID) אליו תרצה להעביר את הטוקן:");
-            if (!newUserId) return;
-            const data = await apiRequest(\`/admin/tokens/\${id}/transfer\`, { method: 'PATCH', body: JSON.stringify({ new_user_id: parseInt(newUserId) }) });
-            if (data.success) { alert("הועבר בהצלחה!"); loadAdminTokens(); } else alert("שגיאה בהעברה");
+        async function openTransferModal(tokenId) {
+            document.getElementById('transfer-tk-id').value = tokenId;
+            const select = document.getElementById('transfer-user-select');
+            select.innerHTML = '<option value="">טוען לקוחות...</option>';
+            document.getElementById('transfer-modal').classList.remove('hidden');
+            
+            const res = await apiRequest('/users');
+            select.innerHTML = '<option value="">בחר לקוח מהרשימה...</option>';
+            if (res.users && res.users.length > 0) {
+                res.users.forEach(u => {
+                    select.innerHTML += \`<option value="\${u.id}">\${u.name || u.email} (ID: \${u.id})</option>\`;
+                });
+            }
+        }
+
+        async function confirmTransfer() {
+            const id = document.getElementById('transfer-tk-id').value;
+            const new_user_id = document.getElementById('transfer-user-select').value;
+            if (!new_user_id) return alert('נא לבחור לקוח');
+            
+            const data = await apiRequest(\`/admin/tokens/\${id}/transfer\`, { method: 'POST', body: JSON.stringify({ new_user_id: parseInt(new_user_id) }) });
+            if (data.success) { 
+                closeModals(); 
+                loadAdminTokens(); 
+                alert("הועבר בהצלחה!");
+            } else {
+                alert("שגיאה בהעברה: " + data.message);
+            }
         }
     </script>
 </body>
