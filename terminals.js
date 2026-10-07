@@ -7,6 +7,9 @@ function cleanText(text) {
 
 function getAllParams(params, prefix) {
   let arr = [];
+  if (params[prefix] !== undefined) {
+    arr.push(params[prefix]);
+  }
   let i = 1;
   while(params[`${prefix}_${i}`] !== undefined) {
     arr.push(params[`${prefix}_${i}`]);
@@ -52,8 +55,7 @@ export async function processTerminalFlow(params, token, env) {
       tts += ` למסוף ${cleanText(t.name)} הקישו ${t.index}`;
     });
     
-    const nextIdx = terminal_choices.length + 1;
-    return `read=${tts}=terminal_${nextIdx},,${maxLen},,,NO,,,,${allowedDigits},,,,,no`;
+    return `read=${tts}=terminal_1,,${maxLen},,,NO,,,,${allowedDigits},,,,,no`;
   }
 
   const currentTerminalChoice = terminal_choices[terminal_choices.length - 1];
