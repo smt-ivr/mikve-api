@@ -1,16 +1,23 @@
+// worker.js
 import { handleSaasRequest } from './saas-api.js';
 import { getValidToken } from './auth.js';
 import { getActiveClient } from './clients.js';
 import { processIvrFlow } from './payment.js';
 import { processManagementFlow } from './management.js';
 import { processTerminalFlow } from './terminals.js';
+import { dashboardHTML } from './dashboard-html.js'; 
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // 1. ניתוב לממשק הניהול ומסד הנתונים (SaaS)
+    if (path === '/mikve' || path === '/mikve/') {
+      return new Response(dashboardHTML, {
+        headers: { "Content-Type": "text/html; charset=utf-8" }
+      });
+    }
+
     if (path.startsWith('/mikve/saas')) {
       const corsHeaders = {
         "Access-Control-Allow-Origin": "*",
@@ -27,7 +34,6 @@ export default {
       return new Response(response.body, { status: response.status, headers: responseHeaders });
     }
 
-    // 2. ניתוב למערכות ימות המשיח בלבד
     if (path.startsWith('/mikve/yemot')) {
       let params = {};
       if (request.method === 'GET') {
@@ -110,7 +116,6 @@ export default {
       }
     }
 
-    // 3. חסימת כל נתיב אחר והחזרת שגיאה רגילה (לא של ימות המשיח)
     return new Response("נתיב לא נמצא. הגישה נדחתה.", { 
       status: 404, 
       headers: { "Content-Type": "text/plain; charset=utf-8" } 
@@ -118,7 +123,6 @@ export default {
   }
 };
 
-// פונקציית העזר לתשובות בפורמט של ימות המשיח
 function respond(text) {
   return new Response(text + "&", { headers: { "Content-Type": "text/plain; charset=utf-8" } });
 }
