@@ -1,6 +1,8 @@
+// saas-api.js
 export async function handleSaasRequest(request, env) {
   const url = new URL(request.url);
-  const path = url.pathname.replace('/saas', '');
+  const saasIndex = url.pathname.indexOf('/saas');
+  const path = saasIndex !== -1 ? url.pathname.substring(saasIndex + 5) : url.pathname;
 
   const jsonResponse = (data, status = 200) => 
     new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
@@ -11,7 +13,7 @@ export async function handleSaasRequest(request, env) {
       await env.DB.prepare("INSERT INTO saas_users (email, password) VALUES (?, ?)").bind(email, password).run();
       return jsonResponse({ success: true, message: "המשתמש נוצר בהצלחה" });
     } catch (e) {
-      return jsonResponse({ success: false, message: "שגיאה ביצירת משתמש, ייתכן שהמייל כבר קיים" }, 400);
+      return jsonResponse({ success: false, message: "שגיאה ביצירת משתמש ייתכן שהמייל כבר קיים" }, 400);
     }
   }
 
