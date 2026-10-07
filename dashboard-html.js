@@ -33,7 +33,7 @@ export const dashboardHTML = `<!DOCTYPE html>
         .sidebar-footer { padding: 20px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); cursor: pointer; }
         .sidebar-footer:hover { background-color: rgba(255,255,255,0.05); }
 
-        .main-content { margin-right: var(--sidebar-width); padding: 30px; width: calc(100% - var(--sidebar-width)); }
+        .main-content { margin-right: var(--sidebar-width); padding: 30px; width: calc(100% - var(--sidebar-width)); overflow-x: hidden; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .header h1 { font-size: 24px; color: var(--primary-color); }
         
@@ -49,6 +49,8 @@ export const dashboardHTML = `<!DOCTYPE html>
         .admin-only, .history-only { display: none; }
         .status-success { color: green; font-weight: bold; }
         .status-failed { color: red; font-weight: bold; }
+        .checkbox-group { display: flex; align-items: center; gap: 5px; }
+        .checkbox-group input { width: auto; }
     </style>
 </head>
 <body>
@@ -86,7 +88,6 @@ export const dashboardHTML = `<!DOCTYPE html>
                 <div>שלום, <span id="user-greeting"></span></div>
             </div>
 
-            <!-- אזור ניהול טוקנים -->
             <div id="tokens-view" class="view-section">
                 <div class="card">
                     <h3>יצירת טוקן חיבור חדש</h3>
@@ -107,7 +108,6 @@ export const dashboardHTML = `<!DOCTYPE html>
                 </div>
             </div>
 
-            <!-- היסטוריית מסופים -->
             <div id="history-view" class="view-section hidden">
                 <div class="card">
                     <h3>יומן פעולות מסופים</h3>
@@ -119,24 +119,25 @@ export const dashboardHTML = `<!DOCTYPE html>
                 </div>
             </div>
 
-            <!-- אזור ניהול לקוחות (למנהלים) -->
             <div id="users-view" class="view-section hidden">
                 <div class="card">
                     <h3>הוספת לקוח חדש</h3>
                     <div class="form-row">
                         <div class="form-control"><label>דואר אלקטרוני</label><input type="email" id="new-user-email"></div>
-                        <div class="form-control"><label>סיסמה התחלתית</label><input type="text" id="new-user-pass"></div>
+                        <div class="form-control"><label>סיסמה</label><input type="text" id="new-user-pass"></div>
                         <div class="form-control"><label>מכסת טוקנים</label><input type="number" id="new-user-max" value="1" min="1"></div>
-                        <div class="form-control" style="align-items: center; display: flex; gap: 10px; margin-bottom: 10px;">
-                            <input type="checkbox" id="new-user-history" style="width: auto;"> <label>צפייה בהיסטוריה</label>
-                        </div>
-                        <button class="btn btn-primary" style="width: auto; padding: 10px 20px;" onclick="createUser()">פתח לקוח</button>
+                    </div>
+                    <div class="form-row" style="margin-bottom: 20px;">
+                        <div class="checkbox-group"><input type="checkbox" id="new-user-history"> <label>היסטוריה</label></div>
+                        <div class="checkbox-group"><input type="checkbox" id="new-user-payment"> <label>סליקה</label></div>
+                        <div class="checkbox-group"><input type="checkbox" id="new-user-terminal"> <label>מסופים</label></div>
+                        <button class="btn btn-primary" style="width: auto; padding: 8px 20px; margin-right: auto;" onclick="createUser()">פתח לקוח</button>
                     </div>
                 </div>
                 <div class="card">
                     <h3>רשימת לקוחות המערכת</h3>
                     <table>
-                        <thead><tr><th>ID</th><th>דואר אלקטרוני</th><th>טוקנים מותרים</th><th>היסטוריה</th><th>פעולות מנהל</th></tr></thead>
+                        <thead><tr><th>דואר אלקטרוני</th><th>טוקנים מותרים</th><th>היסטוריה</th><th>סליקה</th><th>מסופים</th><th>פעולות מנהל</th></tr></thead>
                         <tbody id="users-table-body"></tbody>
                     </table>
                 </div>
@@ -284,16 +285,20 @@ export const dashboardHTML = `<!DOCTYPE html>
                             <td>\${u.email}</td>
                             <td><input type="number" id="max_\${u.id}" value="\${u.max_tokens}" style="width: 60px; padding: 4px;"></td>
                             <td><input type="checkbox" id="hist_\${u.id}" \${u.can_view_history ? 'checked' : ''}></td>
-                            <td><button class="btn btn-primary btn-sm" onclick="updateUser(\${u.id})"><i class="fas fa-save"></i> שמור שינויים</button></td>
+                            <td><input type="checkbox" id="pay_\${u.id}" \${u.can_use_payment ? 'checked' : ''}></td>
+                            <td><input type="checkbox" id="term_\${u.id}" \${u.can_use_terminal ? 'checked' : ''}></td>
+                            <td><button class="btn btn-primary btn-sm" onclick="updateUser(\${u.id})"><i class="fas fa-save"></i> שמור</button></td>
                         </tr>\`;
                 });
-            } else tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">אין נתונים להצגה</td></tr>';
+            } else tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">אין נתונים להצגה</td></tr>';
         }
 
         async function updateUser(id) {
             const max_tokens = document.getElementById(\`max_\${id}\`).value;
             const can_view_history = document.getElementById(\`hist_\${id}\`).checked;
-            const data = await apiRequest(\`/users/\${id}\`, { method: 'PATCH', body: JSON.stringify({ max_tokens, can_view_history }) });
+            const can_use_payment = document.getElementById(\`pay_\${id}\`).checked;
+            const can_use_terminal = document.getElementById(\`term_\${id}\`).checked;
+            const data = await apiRequest(\`/users/\${id}\`, { method: 'PATCH', body: JSON.stringify({ max_tokens, can_view_history, can_use_payment, can_use_terminal }) });
             if (data.success) { alert("נשמר בהצלחה!"); loadUsers(); } else alert("שגיאה בשמירה");
         }
 
@@ -302,9 +307,11 @@ export const dashboardHTML = `<!DOCTYPE html>
             const password = document.getElementById('new-user-pass').value;
             const max_tokens = document.getElementById('new-user-max').value;
             const can_view_history = document.getElementById('new-user-history').checked;
+            const can_use_payment = document.getElementById('new-user-payment').checked;
+            const can_use_terminal = document.getElementById('new-user-terminal').checked;
 
             if(!email || !password) { alert("חובה להזין מייל וסיסמה."); return; }
-            const data = await apiRequest('/users', { method: 'POST', body: JSON.stringify({ email, password, max_tokens, can_view_history }) });
+            const data = await apiRequest('/users', { method: 'POST', body: JSON.stringify({ email, password, max_tokens, can_view_history, can_use_payment, can_use_terminal }) });
             if (data.success) {
                 alert("הלקוח נוצר בהצלחה.");
                 document.getElementById('new-user-email').value = '';
