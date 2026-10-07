@@ -1,3 +1,4 @@
+// worker.js
 import { handleSaasRequest } from './saas-api.js';
 import { getValidToken } from './auth.js';
 import { getActiveClient } from './clients.js';
