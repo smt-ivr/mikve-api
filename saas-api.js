@@ -1,4 +1,3 @@
-// saas-api.js
 export async function handleSaasRequest(request, env) {
   const url = new URL(request.url);
   const apiIndex = url.pathname.indexOf('/api');
@@ -8,9 +7,9 @@ export async function handleSaasRequest(request, env) {
     new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 
   if (request.method === 'POST' && path === '/register') {
-    const { email, password } = await request.json();
+    const { name, email, password } = await request.json();
     try {
-      await env.DB.prepare("INSERT INTO saas_users (email, password) VALUES (?, ?)").bind(email, password).run();
+      await env.DB.prepare("INSERT INTO saas_users (name, email, password) VALUES (?, ?, ?)").bind(name || "", email, password).run();
       return jsonResponse({ success: true, message: "המשתמש נוצר בהצלחה" });
     } catch (e) {
       return jsonResponse({ success: false, message: "שגיאה ביצירת משתמש ייתכן שהמייל כבר קיים" }, 400);
@@ -30,7 +29,7 @@ export async function handleSaasRequest(request, env) {
     return jsonResponse({ success: false, message: "טוקן אימות לא חוקי" }, 401);
   }
 
-  const currentUser = await env.DB.prepare("SELECT id, email, max_tokens, is_admin, can_view_history, can_use_payment, can_use_terminal FROM saas_users WHERE email = ? AND password = ?")
+  const currentUser = await env.DB.prepare("SELECT id, name, email, max_tokens, is_admin, can_view_history, can_use_payment, can_use_terminal FROM saas_users WHERE email = ? AND password = ?")
     .bind(email, password).first();
 
   if (!currentUser) {
@@ -88,15 +87,15 @@ export async function handleSaasRequest(request, env) {
   }
 
   if (request.method === 'GET' && path === '/users') {
-    const { results } = await env.DB.prepare("SELECT id, email, max_tokens, is_admin, can_view_history, can_use_payment, can_use_terminal, created_at FROM saas_users").all();
+    const { results } = await env.DB.prepare("SELECT id, name, email, max_tokens, is_admin, can_view_history, can_use_payment, can_use_terminal, created_at FROM saas_users").all();
     return jsonResponse({ success: true, users: results });
   }
 
   if (request.method === 'POST' && path === '/users') {
-    const { email, password, max_tokens, can_view_history, can_use_payment, can_use_terminal } = await request.json();
+    const { name, email, password, max_tokens, can_view_history, can_use_payment, can_use_terminal } = await request.json();
     try {
-      await env.DB.prepare("INSERT INTO saas_users (email, password, max_tokens, can_view_history, can_use_payment, can_use_terminal) VALUES (?, ?, ?, ?, ?, ?)")
-        .bind(email, password, max_tokens || 1, can_view_history ? 1 : 0, can_use_payment ? 1 : 0, can_use_terminal ? 1 : 0).run();
+      await env.DB.prepare("INSERT INTO saas_users (name, email, password, max_tokens, can_view_history, can_use_payment, can_use_terminal) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .bind(name || "", email, password, max_tokens || 1, can_view_history ? 1 : 0, can_use_payment ? 1 : 0, can_use_terminal ? 1 : 0).run();
       return jsonResponse({ success: true, message: "הלקוח נוצר" });
     } catch (e) {
       return jsonResponse({ success: false, message: "שגיאה, ייתכן שהמייל קיים" }, 400);
@@ -105,15 +104,15 @@ export async function handleSaasRequest(request, env) {
 
   if (request.method === 'PATCH' && path.startsWith('/users/')) {
     const targetUserId = path.split('/')[2];
-    const { max_tokens, can_view_history, can_use_payment, can_use_terminal } = await request.json();
-    await env.DB.prepare("UPDATE saas_users SET max_tokens = ?, can_view_history = ?, can_use_payment = ?, can_use_terminal = ? WHERE id = ?")
-      .bind(max_tokens, can_view_history ? 1 : 0, can_use_payment ? 1 : 0, can_use_terminal ? 1 : 0, targetUserId).run();
+    const { name, max_tokens, can_view_history, can_use_payment, can_use_terminal } = await request.json();
+    await env.DB.prepare("UPDATE saas_users SET name = ?, max_tokens = ?, can_view_history = ?, can_use_payment = ?, can_use_terminal = ? WHERE id = ?")
+      .bind(name || "", max_tokens, can_view_history ? 1 : 0, can_use_payment ? 1 : 0, can_use_terminal ? 1 : 0, targetUserId).run();
     return jsonResponse({ success: true, message: "הגדרות לקוח עודכנו" });
   }
 
   if (request.method === 'GET' && path === '/admin/tokens') {
     const { results } = await env.DB.prepare(`
-      SELECT t.id, t.user_id, t.token, t.target_club_id, t.target_username, t.target_password, t.label, t.created_at, u.email as owner_email
+      SELECT t.id, t.user_id, t.token, t.target_club_id, t.target_username, t.target_password, t.label, t.created_at, u.email as owner_email, u.name as owner_name
       FROM saas_tokens t
       JOIN saas_users u ON t.user_id = u.id
     `).all();
