@@ -1,4 +1,3 @@
-// dashboard-html.js
 export const dashboardHTML = `<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
@@ -125,6 +124,7 @@ export const dashboardHTML = `<!DOCTYPE html>
                 <div class="card">
                     <h3>הוספת לקוח חדש</h3>
                     <div class="form-row">
+                        <div class="form-control"><label>שם מלא</label><input type="text" id="new-user-name"></div>
                         <div class="form-control"><label>דואר אלקטרוני</label><input type="email" id="new-user-email"></div>
                         <div class="form-control"><label>סיסמה</label><input type="text" id="new-user-pass"></div>
                         <div class="form-control"><label>מכסת טוקנים</label><input type="number" id="new-user-max" value="1" min="1"></div>
@@ -139,7 +139,7 @@ export const dashboardHTML = `<!DOCTYPE html>
                 <div class="card">
                     <h3>רשימת לקוחות המערכת</h3>
                     <table>
-                        <thead><tr><th>ID</th><th>דואר אלקטרוני</th><th>טוקנים מותרים</th><th>היסטוריה</th><th>סליקה</th><th>מסופים</th><th>פעולות מנהל</th></tr></thead>
+                        <thead><tr><th>ID</th><th>שם</th><th>דואר אלקטרוני</th><th>טוקנים מותרים</th><th>היסטוריה</th><th>סליקה</th><th>מסופים</th><th>פעולות מנהל</th></tr></thead>
                         <tbody id="users-table-body"></tbody>
                     </table>
                 </div>
@@ -203,7 +203,7 @@ export const dashboardHTML = `<!DOCTYPE html>
         }
 
         function setupDashboard() {
-            document.getElementById('user-greeting').innerText = currentUser.email;
+            document.getElementById('user-greeting').innerText = currentUser.name || currentUser.email;
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('app-layout').style.display = 'flex';
             
@@ -296,6 +296,7 @@ export const dashboardHTML = `<!DOCTYPE html>
                     tbody.innerHTML += \`
                         <tr>
                             <td>\${u.id}</td>
+                            <td><input type="text" id="name_\${u.id}" value="\${u.name || ''}" style="width: 120px; padding: 4px;"></td>
                             <td>\${u.email}</td>
                             <td><input type="number" id="max_\${u.id}" value="\${u.max_tokens}" style="width: 60px; padding: 4px;"></td>
                             <td><input type="checkbox" id="hist_\${u.id}" \${u.can_view_history ? 'checked' : ''}></td>
@@ -304,19 +305,21 @@ export const dashboardHTML = `<!DOCTYPE html>
                             <td><button class="btn btn-primary btn-sm" onclick="updateUser(\${u.id})"><i class="fas fa-save"></i> שמור</button></td>
                         </tr>\`;
                 });
-            } else tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">אין נתונים להצגה</td></tr>';
+            } else tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">אין נתונים להצגה</td></tr>';
         }
 
         async function updateUser(id) {
+            const name = document.getElementById(\`name_\${id}\`).value;
             const max_tokens = document.getElementById(\`max_\${id}\`).value;
             const can_view_history = document.getElementById(\`hist_\${id}\`).checked;
             const can_use_payment = document.getElementById(\`pay_\${id}\`).checked;
             const can_use_terminal = document.getElementById(\`term_\${id}\`).checked;
-            const data = await apiRequest(\`/users/\${id}\`, { method: 'PATCH', body: JSON.stringify({ max_tokens, can_view_history, can_use_payment, can_use_terminal }) });
+            const data = await apiRequest(\`/users/\${id}\`, { method: 'PATCH', body: JSON.stringify({ name, max_tokens, can_view_history, can_use_payment, can_use_terminal }) });
             if (data.success) { alert("נשמר בהצלחה!"); loadUsers(); } else alert("שגיאה בשמירה");
         }
 
         async function createUser() {
+            const name = document.getElementById('new-user-name').value;
             const email = document.getElementById('new-user-email').value;
             const password = document.getElementById('new-user-pass').value;
             const max_tokens = document.getElementById('new-user-max').value;
@@ -325,9 +328,10 @@ export const dashboardHTML = `<!DOCTYPE html>
             const can_use_terminal = document.getElementById('new-user-terminal').checked;
 
             if(!email || !password) { alert("חובה להזין מייל וסיסמה."); return; }
-            const data = await apiRequest('/users', { method: 'POST', body: JSON.stringify({ email, password, max_tokens, can_view_history, can_use_payment, can_use_terminal }) });
+            const data = await apiRequest('/users', { method: 'POST', body: JSON.stringify({ name, email, password, max_tokens, can_view_history, can_use_payment, can_use_terminal }) });
             if (data.success) {
                 alert("הלקוח נוצר בהצלחה.");
+                document.getElementById('new-user-name').value = '';
                 document.getElementById('new-user-email').value = '';
                 document.getElementById('new-user-pass').value = '';
                 loadUsers();
@@ -340,8 +344,9 @@ export const dashboardHTML = `<!DOCTYPE html>
             tbody.innerHTML = '';
             if (data.tokens && data.tokens.length > 0) {
                 data.tokens.forEach(t => {
+                    const ownerDisplay = t.owner_name ? \`\${t.owner_name} (\${t.owner_email})\` : t.owner_email;
                     tbody.innerHTML += \`<tr>
-                        <td>\${t.owner_email}</td>
+                        <td>\${ownerDisplay}</td>
                         <td>\${t.label}</td>
                         <td>\${t.target_club_id}</td>
                         <td>\${t.target_username}</td>
