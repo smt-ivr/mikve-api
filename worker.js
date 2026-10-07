@@ -1,3 +1,4 @@
+// worker.js
 import { handleSaasRequest } from './saas-api.js';
 import { getValidToken } from './auth.js';
 import { getActiveClient } from './clients.js';
@@ -9,14 +10,13 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // ניתוב נפרד לפאנל ניהול הלקוחות עם תמיכה ב-CORS
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization"
     };
 
-    if (url.pathname.startsWith('/saas')) {
+    if (url.pathname.includes('/saas')) {
       if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
       
       const response = await handleSaasRequest(request, env);
@@ -47,10 +47,10 @@ export default {
       }
     }
 
-    // קבלת פרטי ההתחברות האמיתיים לפי הטוקן שהוזן בשלוחה
     const userToken = params.token;
+    
     if (!userToken) {
-       return respond("id_list_message=t-שגיאה חסר מזהה מערכת");
+       return respond("id_list_message=t-המערכת עודכנה לשיטת חיבור חדשה אנא פנו למנהל המערכת");
     }
 
     let clubCreds;
@@ -64,7 +64,6 @@ export default {
         return respond("id_list_message=t-שגיאה מזהה מערכת לא חוקי");
     }
 
-    // השתלת הנתונים האמיתיים למשתני המערכת
     params.club = clubCreds.target_club_id;
     params.user = clubCreds.target_username;
     params.pass = clubCreds.target_password;
