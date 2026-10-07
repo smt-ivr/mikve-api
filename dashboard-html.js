@@ -1,3 +1,4 @@
+// dashboard-html.js
 export const dashboardHTML = `<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
@@ -78,6 +79,7 @@ export const dashboardHTML = `<!DOCTYPE html>
                 <li class="active" onclick="switchTab('tokens-view', this)"><i class="fas fa-key"></i> ניהול טוקנים</li>
                 <li class="history-only" onclick="switchTab('history-view', this)"><i class="fas fa-history"></i> היסטוריית מסופים</li>
                 <li class="admin-only" onclick="switchTab('users-view', this)"><i class="fas fa-users"></i> ניהול לקוחות</li>
+                <li class="admin-only" onclick="switchTab('admin-tokens-view', this)"><i class="fas fa-cogs"></i> כל הטוקנים (מנהל)</li>
             </ul>
             <div class="sidebar-footer" onclick="logout()"><i class="fas fa-sign-out-alt"></i> התנתק</div>
         </div>
@@ -137,8 +139,18 @@ export const dashboardHTML = `<!DOCTYPE html>
                 <div class="card">
                     <h3>רשימת לקוחות המערכת</h3>
                     <table>
-                        <thead><tr><th>דואר אלקטרוני</th><th>טוקנים מותרים</th><th>היסטוריה</th><th>סליקה</th><th>מסופים</th><th>פעולות מנהל</th></tr></thead>
+                        <thead><tr><th>ID</th><th>דואר אלקטרוני</th><th>טוקנים מותרים</th><th>היסטוריה</th><th>סליקה</th><th>מסופים</th><th>פעולות מנהל</th></tr></thead>
                         <tbody id="users-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="admin-tokens-view" class="view-section hidden">
+                <div class="card">
+                    <h3>ניהול טוקנים מלא (מנהל)</h3>
+                    <table>
+                        <thead><tr><th>בעלים</th><th>מזהה</th><th>Club ID</th><th>שם משתמש</th><th>סיסמה</th><th>טוקן</th><th>פעולות</th></tr></thead>
+                        <tbody id="admin-tokens-table-body"></tbody>
                     </table>
                 </div>
             </div>
@@ -224,6 +236,7 @@ export const dashboardHTML = `<!DOCTYPE html>
             if(tabId === 'tokens-view') { document.getElementById('page-title').innerText = 'ניהול טוקנים'; loadTokens(); }
             else if(tabId === 'history-view') { document.getElementById('page-title').innerText = 'היסטוריית מסופים'; loadHistory(); }
             else if(tabId === 'users-view') { document.getElementById('page-title').innerText = 'ניהול לקוחות'; loadUsers(); }
+            else if(tabId === 'admin-tokens-view') { document.getElementById('page-title').innerText = 'כל הטוקנים במערכת'; loadAdminTokens(); }
         }
 
         async function loadTokens() {
@@ -282,6 +295,7 @@ export const dashboardHTML = `<!DOCTYPE html>
                 data.users.forEach(u => {
                     tbody.innerHTML += \`
                         <tr>
+                            <td>\${u.id}</td>
                             <td>\${u.email}</td>
                             <td><input type="number" id="max_\${u.id}" value="\${u.max_tokens}" style="width: 60px; padding: 4px;"></td>
                             <td><input type="checkbox" id="hist_\${u.id}" \${u.can_view_history ? 'checked' : ''}></td>
@@ -290,7 +304,7 @@ export const dashboardHTML = `<!DOCTYPE html>
                             <td><button class="btn btn-primary btn-sm" onclick="updateUser(\${u.id})"><i class="fas fa-save"></i> שמור</button></td>
                         </tr>\`;
                 });
-            } else tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">אין נתונים להצגה</td></tr>';
+            } else tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">אין נתונים להצגה</td></tr>';
         }
 
         async function updateUser(id) {
@@ -318,6 +332,32 @@ export const dashboardHTML = `<!DOCTYPE html>
                 document.getElementById('new-user-pass').value = '';
                 loadUsers();
             } else alert(data.message);
+        }
+
+        async function loadAdminTokens() {
+            const data = await apiRequest('/admin/tokens');
+            const tbody = document.getElementById('admin-tokens-table-body');
+            tbody.innerHTML = '';
+            if (data.tokens && data.tokens.length > 0) {
+                data.tokens.forEach(t => {
+                    tbody.innerHTML += \`<tr>
+                        <td>\${t.owner_email}</td>
+                        <td>\${t.label}</td>
+                        <td>\${t.target_club_id}</td>
+                        <td>\${t.target_username}</td>
+                        <td>\${t.target_password}</td>
+                        <td><span class="token-string" style="font-size:11px;">\${t.token}</span></td>
+                        <td><button class="btn btn-primary btn-sm" onclick="transferToken(\${t.id})">העבר בעלות</button></td>
+                    </tr>\`;
+                });
+            } else tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">אין טוקנים פעילים במערכת.</td></tr>';
+        }
+
+        async function transferToken(id) {
+            const newUserId = prompt("הכנס את מזהה הלקוח (ID) אליו תרצה להעביר את הטוקן:");
+            if (!newUserId) return;
+            const data = await apiRequest(\`/admin/tokens/\${id}/transfer\`, { method: 'PATCH', body: JSON.stringify({ new_user_id: parseInt(newUserId) }) });
+            if (data.success) { alert("הועבר בהצלחה!"); loadAdminTokens(); } else alert("שגיאה בהעברה");
         }
     </script>
 </body>
