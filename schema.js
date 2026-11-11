@@ -29,6 +29,21 @@ export async function ensureSchema(env) {
     `ALTER TABLE saas_users ADD COLUMN api_scopes TEXT DEFAULT ''`,
     `ALTER TABLE saas_users ADD COLUMN google_sub TEXT`,
     `ALTER TABLE saas_users ADD COLUMN avatar_url TEXT`,
+    // פירוט היסטוריית רכישות
+    `ALTER TABLE charge_logs ADD COLUMN amount_agorot INTEGER`,
+    `ALTER TABLE charge_logs ADD COLUMN item_type TEXT`,
+    `ALTER TABLE charge_logs ADD COLUMN item_name TEXT`,
+    `ALTER TABLE charge_logs ADD COLUMN start_date TEXT`,
+    `ALTER TABLE charge_logs ADD COLUMN end_date TEXT`,
+    `ALTER TABLE charge_logs ADD COLUMN card_last4 TEXT`,
+    `ALTER TABLE charge_logs ADD COLUMN client_phone TEXT`,
+    `ALTER TABLE charge_logs ADD COLUMN source TEXT`,
+    `ALTER TABLE charge_logs ADD COLUMN api_key_name TEXT`,
+    `ALTER TABLE charge_logs ADD COLUMN logged_at TEXT`,
+    // פירוט היסטוריית מסופים
+    `ALTER TABLE terminal_logs ADD COLUMN terminal_name TEXT`,
+    `ALTER TABLE terminal_logs ADD COLUMN source TEXT`,
+    `ALTER TABLE terminal_logs ADD COLUMN api_key_name TEXT`,
   ];
   for (const sql of alters) {
     try { await env.DB.prepare(sql).run(); } catch (e) { /* duplicate column */ }

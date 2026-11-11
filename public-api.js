@@ -1,6 +1,7 @@
 // public-api.js - API ציבורי ללקוחות, מאובטח במפתח API עם הרשאות (scopes)
 import { getValidToken } from './auth.js';
 import { effectiveKeyScopes } from './scopes.js';
+import { logPurchase, logTerminalAction, queryPurchases, queryTerminalLogs, resolveTerminalClients } from './history.js';
 
 const BASE_URL = "https://prod.xn--8dbba8a7b.com";
 
@@ -56,8 +57,9 @@ export async function handlePublicApi(request, env, subPath) {
   const scopes = effectiveKeyScopes(row.scopes, row);
   await env.DB.prepare("UPDATE saas_api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?").bind(row.key_id).run();
 
-  const need = scope => scopes.includes(scope) ? null :
-    err(403, 'insufficient_scope', `למפתח זה אין הרשאה: ${scope}`);
+  const need = (...anyOf) => anyOf.some(s => scopes.includes(s)) ? null :
+    err(403, 'insufficient_scope', `למפתח זה אין הרשאה: ${anyOf.join(' או ')}`);
+  const filters = () => Object.fromEntries(['from', 'to', 'client_id', 'personal_id', 'phone', 'status', 'type', 'source', 'search', 'terminal_id', 'action', 'limit', 'offset'].map(k => [k, q.get(k)]));
 
   const method = request.method;
   const parts = subPath.split('/').filter(Boolean); // e.g. ['clients','123']
@@ -89,6 +91,42 @@ export async function handlePublicApi(request, env, subPath) {
     // GET /v1/me
     if (method === 'GET' && parts[0] === 'me' && parts.length === 1) {
       return json({ success: true, key: { name: row.key_name, scopes }, system: { id: row.token_id, label: row.label, club_id: clubId } });
+    }
+
+    // ---------- היסטוריה ----------
+    if (method === 'GET' && parts[0] === 'history') {
+      const resolve = q.get('resolve_clients') !== '0';
+      if (parts[1] === 'purchases' && parts.length === 2) {
+        const d = need('history:purchases', 'purchases:read'); if (d) return d;
+        return json({ success: true, ...(await queryPurchases(env, { clubId }, filters())) });
+      }
+      if (parts[1] === 'terminals' && parts.length === 2) {
+        const d = need('history:terminals', 'terminals:read'); if (d) return d;
+        const r = await queryTerminalLogs(env, { clubId }, filters());
+        if (resolve) await resolveTerminalClients(env, r.logs);
+        return json({ success: true, ...r });
+      }
+      if (parts.length === 1) {
+        const canP = scopes.includes('history:purchases') || scopes.includes('purchases:read');
+        const canT = scopes.includes('history:terminals') || scopes.includes('terminals:read');
+        if (!canP && !canT) return need('history:purchases', 'history:terminals');
+        const f = filters();
+        const out = { success: true, events: [] };
+        if (canP) {
+          const p = await queryPurchases(env, { clubId }, f);
+          out.purchases_total = p.total;
+          out.events.push(...p.purchases.map(x => ({ kind: 'purchase', ...x })));
+        }
+        if (canT) {
+          const t = await queryTerminalLogs(env, { clubId }, f);
+          if (resolve) await resolveTerminalClients(env, t.logs);
+          out.terminal_actions_total = t.total;
+          out.events.push(...t.logs.map(x => ({ kind: 'terminal_action', ...x })));
+        }
+        out.events.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+        out.events = out.events.slice(0, Math.min(parseInt(f.limit, 10) || 100, 1000));
+        return json(out);
+      }
     }
 
     // ---------- מערכת ----------
@@ -160,10 +198,8 @@ export async function handlePublicApi(request, env, subPath) {
     // ---------- רכישות ----------
     if (parts[0] === 'purchases' && parts.length === 1) {
       if (method === 'GET') {
-        const d = need('purchases:read'); if (d) return d;
-        const limit = Math.min(Math.max(parseInt(q.get('limit') || '100', 10) || 100, 1), 500);
-        const { results } = await env.DB.prepare("SELECT * FROM charge_logs WHERE club_id = ? ORDER BY rowid DESC LIMIT ?").bind(clubId, limit).all();
-        return json({ success: true, purchases: results });
+        const d = need('purchases:read', 'history:purchases'); if (d) return d;
+        return json({ success: true, ...(await queryPurchases(env, { clubId }, filters())) });
       }
 
       if (method === 'POST') {
@@ -214,8 +250,19 @@ export async function handlePublicApi(request, env, subPath) {
         const ok = !!(p.ok && p.data && p.data.isSuccess);
         const msg = ok ? 'הצלחה' : String(p.data?.message || 'שגיאה בחיוב');
         const clientName = `${client.firstName || ''} ${client.lastName || ''}`.trim();
-        await env.DB.prepare("INSERT INTO charge_logs (club_id, client_id, amount, status, response_msg, api_phone, client_name, personal_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-          .bind(clubId, client.id, amount / 100, ok ? 'SUCCESS' : 'FAILED', msg, `API:${row.key_name || row.key_id}`, clientName, client.personalId || '').run();
+        let period = dates || {};
+        if (itemType === 6) {
+          let cur = client.licenceExp ? new Date(client.licenceExp) : new Date();
+          if (isNaN(cur)) cur = new Date();
+          const next = new Date(cur); next.setFullYear(next.getFullYear() + 1);
+          period = { startDate: cur.toISOString(), endDate: next.toISOString() };
+        }
+        await logPurchase(env, {
+          clubId, clientId: client.id, amountAgorot: amount, success: ok, message: msg,
+          clientName, personalId: client.personalId || '', clientPhone: client.phone || null,
+          itemType, startDate: period.startDate, endDate: period.endDate, cardLast4: ccNum.slice(-4),
+          source: 'api', apiKeyName: row.key_name || String(row.key_id)
+        });
 
         return json({ success: ok, purchase: { client_id: client.id, type: b.type, amount_agorot: amount, message: msg } }, ok ? 200 : 402);
       }
@@ -235,10 +282,10 @@ export async function handlePublicApi(request, env, subPath) {
       }
 
       if (method === 'GET' && parts[1] === 'logs' && parts.length === 2) {
-        const d = need('terminals:read'); if (d) return d;
-        const limit = Math.min(Math.max(parseInt(q.get('limit') || '100', 10) || 100, 1), 500);
-        const { results } = await env.DB.prepare("SELECT id, terminal_id, action_name, status, api_phone, timestamp FROM terminal_logs WHERE club_id = ? ORDER BY timestamp DESC LIMIT ?").bind(clubId, limit).all();
-        return json({ success: true, logs: results });
+        const d = need('terminals:read', 'history:terminals'); if (d) return d;
+        const r = await queryTerminalLogs(env, { clubId }, filters());
+        if (q.get('resolve_clients') !== '0') await resolveTerminalClients(env, r.logs);
+        return json({ success: true, ...r });
       }
 
       const terminalId = parts[1];
@@ -265,8 +312,10 @@ export async function handlePublicApi(request, env, subPath) {
           const allowed = ['openGate', 'reload', 'reboot', 'checkUpdates'];
           if (!allowed.includes(b.action)) return err(400, 'invalid_action', `action חייב להיות אחד מ: ${allowed.join(', ')}`);
           const r = await upstream('/Terminal/TerminalAction', { method: 'POST', body: { terminalId: term.id, targetId: term.hardwareId, actionName: b.action, data: '' } });
-          await env.DB.prepare("INSERT INTO terminal_logs (club_id, username, terminal_id, action_name, status, api_phone) VALUES (?, ?, ?, ?, ?, ?)")
-            .bind(clubId, row.target_username, term.id, b.action, r.ok ? 'SUCCESS' : 'FAILED', `API:${row.key_name || row.key_id}`).run();
+          await logTerminalAction(env, {
+            clubId, username: row.target_username, terminalId: term.id, terminalName: term.name || null,
+            action: b.action, success: r.ok, source: 'api', apiKeyName: row.key_name || String(row.key_id)
+          });
           return r.ok ? json({ success: true, terminal_id: term.id, action: b.action }) : upstreamFail(r);
         }
       }

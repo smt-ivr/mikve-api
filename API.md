@@ -36,6 +36,8 @@ X-API-Key: mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 | Scope | תיאור |
 |---|---|
+| `history:purchases` | **היסטוריית רכישות בלבד** – מי רכש, מה, מתי, כמה ובאיזה ערוץ |
+| `history:terminals` | **היסטוריית מסופים בלבד** – מי פתח איזה מסוף ומתי |
 | `club:read` | צפייה בפרטי המערכת והקבוצות |
 | `clients:read` | צפייה ברשימת לקוחות ופרטי לקוח |
 | `clients:write` | עדכון פרטי לקוח |
@@ -45,6 +47,8 @@ X-API-Key: mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 | `terminals:read` | צפייה במסופים, סטטוס חיבור ויומן פעולות |
 | `terminals:control` | שליחת פקודות למסוף (פתיחת דלת, ריענון, הפעלה מחדש) |
 | `*` | גישה מלאה – כל ההרשאות |
+
+> מפתח עם `history:purchases` ו/או `history:terminals` בלבד יכול **רק לקרוא היסטוריה** – אין לו גישה לרשימת הלקוחות, לחיובים או לשליטה במסופים.
 
 ההרשאות בפועל של מפתח הן החיתוך בין מה שנבחר ביצירתו לבין מה שמנהל המערכת מאשר כרגע לחשבון.
 ניתן לבדוק את ההרשאות בפועל בכל עת עם `GET /me`.
@@ -88,6 +92,106 @@ X-API-Key: mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
   "success": true,
   "key": { "name": "אתר הזמנות", "scopes": ["clients:read", "purchases:read"] },
   "system": { "id": 12, "label": "מקווה מרכז", "club_id": "abc123" }
+}
+```
+
+---
+
+## היסטוריית פעולות
+
+כל פעולה שבוצעה דרך המערכת – בטלפון (ימות המשיח) או דרך ה-API – נרשמת ומוחזרת כאן עם כל הפרטים.
+
+### פרמטרי סינון משותפים (Query)
+
+| פרמטר | תיאור |
+|---|---|
+| `from` / `to` | טווח תאריכים `YYYY-MM-DD` (כולל), או זמן ISO מלא. הזמנים ב-UTC |
+| `status` | `SUCCESS` / `FAILED` |
+| `source` | `phone` (ימות המשיח) / `api` |
+| `phone` | טלפון המתקשר / הלקוח |
+| `search` | חיפוש חופשי (שם, ת"ז, טלפון, מזהה) |
+| `limit` | ברירת מחדל 100, מקסימום 1000 |
+| `offset` | עימוד |
+
+### GET /history/purchases
+`history:purchases` (או `purchases:read`) – **מי רכש ומה**.
+
+סינונים נוספים: `client_id`, `personal_id`, `type` (`credit` / `subscription` / `license`).
+
+```json
+{
+  "success": true,
+  "total": 1, "limit": 100, "offset": 0,
+  "total_success_agorot": 3000,
+  "purchases": [
+    {
+      "id": 101,
+      "date": "2026-11-11T09:30:12Z",
+      "system": { "label": "מקווה מרכז", "club_id": "abc123" },
+      "client": { "id": "555", "name": "ישראל ישראלי", "personal_id": "012345678", "phone": "0501234567" },
+      "item": { "type": "subscription", "name": "חידוש מנוי חודשי", "start_date": "2026-12-01T00:00:00", "end_date": "2026-12-31T00:00:00" },
+      "amount": { "agorot": 25000, "shekels": 250 },
+      "payment": { "status": "SUCCESS", "success": true, "message": "הצלחה", "card_last4": "1234" },
+      "source": { "channel": "phone", "caller_phone": "0501234567", "api_key": null }
+    }
+  ]
+}
+```
+
+| שדה | תיאור |
+|---|---|
+| `client.id` | מזהה הלקוח במערכת הניהול |
+| `client.personal_id` | תעודת זהות |
+| `item.type` | `credit` = טעינת פעימות, `subscription` = חידוש מנוי חודשי, `license` = חידוש רישיון שנתי |
+| `item.start_date` / `item.end_date` | תקופת המנוי / הרישיון שנרכשו (ב-`credit` – `null`) |
+| `amount` | סכום החיוב באגורות ובשקלים |
+| `payment.card_last4` | 4 ספרות אחרונות של הכרטיס בלבד |
+| `payment.message` | הודעת חברת הסליקה (בכישלון – סיבת הדחייה) |
+| `source.channel` | `phone` – בוצע בטלפון, `api` – בוצע דרך מפתח API |
+| `source.caller_phone` | הטלפון ממנו התקשרו (רק ב-`phone`) |
+| `source.api_key` | שם המפתח שביצע (רק ב-`api`) |
+| `total_success_agorot` | סכום כל החיובים המוצלחים שעונים לסינון |
+
+> ברשומות ישנות (לפני עדכון המערכת) חלק מהשדות (`item`, `card_last4`, `client.phone`, `date`) עשויים להיות `null`.
+
+### GET /history/terminals
+`history:terminals` (או `terminals:read`) – **מי פתח, איזה מסוף ומתי**.
+
+סינונים נוספים: `terminal_id`, `action` (`openGate` / `reload` / `reboot` / `checkUpdates`), `resolve_clients=0` לביטול זיהוי הלקוח.
+
+```json
+{
+  "success": true,
+  "total": 1, "limit": 100, "offset": 0,
+  "logs": [
+    {
+      "id": 77,
+      "date": "2026-11-11T18:02:44Z",
+      "system": { "label": "מקווה מרכז", "club_id": "abc123" },
+      "terminal": { "id": "7", "name": "כניסה ראשית" },
+      "action": { "code": "openGate", "name": "פתיחת דלת" },
+      "status": "SUCCESS", "success": true,
+      "source": { "channel": "phone", "caller_phone": "0501234567", "api_key": null },
+      "client": { "id": "555", "name": "ישראל ישראלי", "personal_id": "012345678", "phone": "0501234567", "matched_by": "caller_phone" }
+    }
+  ]
+}
+```
+
+`client` מזוהה לפי מספר הטלפון שממנו התקשרו מול רשימת הלקוחות במערכת. אם לא נמצאה התאמה (או שהפעולה בוצעה דרך API) – `client` יהיה `null`.
+
+### GET /history
+דורש לפחות אחת מההרשאות `history:purchases` / `history:terminals`. מחזיר את כל סוגי הפעולות שמותרים למפתח בציר זמן אחד, מהחדש לישן. מקבל את אותם פרמטרי סינון (ללא `offset`).
+
+```json
+{
+  "success": true,
+  "purchases_total": 120,
+  "terminal_actions_total": 340,
+  "events": [
+    { "kind": "terminal_action", "date": "2026-11-11T18:02:44Z", "...": "כמו ב-/history/terminals" },
+    { "kind": "purchase", "date": "2026-11-11T09:30:12Z", "...": "כמו ב-/history/purchases" }
+  ]
 }
 ```
 
@@ -169,20 +273,7 @@ X-API-Key: mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ---
 
 ### GET /purchases
-`purchases:read` – היסטוריית חיובים (מהטלפון ומה-API) של המערכת, מהחדש לישן.
-
-| פרמטר | תיאור |
-|---|---|
-| `limit` | ברירת מחדל 100, מקסימום 500 |
-
-```json
-{
-  "success": true,
-  "purchases": [ { "id": 101, "club_id": "abc123", "client_id": 555, "amount": 30, "status": "SUCCESS", "response_msg": "הצלחה", "api_phone": "0501234567", "client_name": "ישראל ישראלי", "personal_id": "012345678" } ]
-}
-```
-
-`status` הוא `SUCCESS` או `FAILED`. בחיובים שבוצעו דרך ה-API השדה `api_phone` יהיה `API:<שם המפתח>`.
+`purchases:read` (או `history:purchases`) – זהה ל-`GET /history/purchases` (נשמר לתאימות).
 
 ### POST /purchases
 `purchases:write` – ביצוע חיוב בכרטיס אשראי.
@@ -258,11 +349,7 @@ X-API-Key: mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 ### GET /terminals/logs
-`terminals:read` – יומן פקודות שנשלחו למסופים (מהטלפון ומה-API).
-
-```json
-{ "success": true, "logs": [ { "id": 1, "terminal_id": 7, "action_name": "openGate", "status": "SUCCESS", "api_phone": "0501234567", "timestamp": "2026-11-11 10:00:00" } ] }
-```
+`terminals:read` (או `history:terminals`) – זהה ל-`GET /history/terminals` (נשמר לתאימות).
 
 ---
 
@@ -300,6 +387,12 @@ const { clients } = await mikve("/clients?phone=0501234567");
 const { client } = await mikve(`/clients/${clients[0].id}`);
 ```
 
+### היסטוריית רכישות של החודש
+
+```bash
+curl -H "Authorization: Bearer $MIKVE_API_KEY" "{{BASE_URL}}/history/purchases?from=2026-11-01&to=2026-11-30&status=SUCCESS"
+```
+
 ### Python
 
 ```python
@@ -320,3 +413,4 @@ renewal = requests.get(f"{BASE}/clients/{clients[0]['id']}/subscription-renewal"
 - המר סכומים לאגורות (×100) לפני שליחה ל-`amount_agorot`.
 - לפני חיוב `subscription`/`license` קרא את המחיר (`/clients/{id}/subscription-renewal` או `/club`) ושלח אותו ב-`expected_amount_agorot`.
 - טפל בשגיאות לפי `error.code`.
+- להיסטוריה השתמש ב-`/history/purchases` ו-`/history/terminals` עם `from`/`to`, ועבור על כל הדפים עם `offset` עד שמגיעים ל-`total`.

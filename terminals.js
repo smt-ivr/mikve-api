@@ -1,4 +1,6 @@
 // terminals.js
+import { logTerminalAction } from './history.js';
+
 const BASE_URL = "https://prod.xn--8dbba8a7b.com";
 
 function cleanText(text) {
@@ -138,9 +140,10 @@ export async function processTerminalFlow(params, token, env) {
 
   const statusLog = actionReq.ok ? 'SUCCESS' : 'FAILED';
 
-  await env.DB.prepare("INSERT INTO terminal_logs (club_id, username, terminal_id, action_name, status, api_phone) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(clubId, username, selectedTerminal.id, actionName, statusLog, apiPhone)
-    .run();
+  await logTerminalAction(env, {
+    clubId, username, terminalId: selectedTerminal.id, terminalName: selectedTerminal.name || null,
+    action: actionName, success: statusLog === 'SUCCESS', callerPhone: apiPhone, source: 'phone'
+  });
 
   if (actionReq.ok) {
     return `id_list_message=t-הפקודה נשלחה בהצלחה למסוף`;

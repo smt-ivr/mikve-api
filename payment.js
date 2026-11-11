@@ -1,4 +1,6 @@
 // payment.js
+import { logPurchase } from './history.js';
+
 const BASE_URL = "https://prod.xn--8dbba8a7b.com";
 
 function cleanText(text) {
@@ -106,6 +108,7 @@ export async function processIvrFlow(clientData, params, token, env) {
   let finalAmountAgorot = 0;
   let paymentItemType = 0;
   let subDates = {};
+  let licDates = {};
 
   if (selectedMenu === '1') {
     paymentItemType = 2; 
@@ -215,6 +218,7 @@ export async function processIvrFlow(clientData, params, token, env) {
       return `read=t-חידוש רשיון שנתי בסך.n-${priceShekels}.t-שקלים.t-הרישיון יחודש עד תאריך.dateH-${formattedNewLicDate}.t-לאישור ומעבר לתשלום הקישו 1=lic_confirm_${nextIdx},,1,,,NO,,,,1*,,,,,no`;
     }
     finalAmountAgorot = priceAgorot;
+    licDates = { startDate: currentLicDate.toISOString(), endDate: newLicDate.toISOString() };
   }
 
   if (finalAmountAgorot === 0) {
@@ -287,7 +291,11 @@ export async function processIvrFlow(clientData, params, token, env) {
     else if (paymentItemType === 1) actionName = "מנוי חודשי";
     else if (paymentItemType === 6) actionName = "חידוש רישיון";
 
-    const payRes = await executePayment(paymentPayload, finalAmountAgorot, params, clientData, token, env);
+    const periodDates = paymentItemType === 1 ? subDates : (paymentItemType === 6 ? licDates : {});
+    const payRes = await executePayment(paymentPayload, finalAmountAgorot, params, clientData, token, env, {
+      itemType: paymentItemType, startDate: periodDates.startDate, endDate: periodDates.endDate,
+      cardLast4: String(currentCcNumber || '').slice(-4)
+    });
 
     if (payRes.isSuccess) {
       return `id_list_message=t-בוצע בהצלחה תשלום.t-עבור.t-${actionName}.t-על סך.n-${finalAmountAgorot / 100}.t-שקלים`;
@@ -310,7 +318,7 @@ export async function processIvrFlow(clientData, params, token, env) {
   }
 }
 
-async function executePayment(paymentPayload, amountAgorot, params, clientData, token, env) {
+async function executePayment(paymentPayload, amountAgorot, params, clientData, token, env, meta = {}) {
   const amountShekels = amountAgorot / 100;
   const apiPhone = params.ApiPhone || "";
   const clientName = cleanText(`${clientData.firstName || ""} ${clientData.lastName || ""}`);
@@ -331,9 +339,12 @@ async function executePayment(paymentPayload, amountAgorot, params, clientData, 
 
   const logMsg = payRes.isSuccess ? "הצלחה" : cleanedMessage;
   
-  await env.DB.prepare("INSERT INTO charge_logs (club_id, client_id, amount, status, response_msg, api_phone, client_name, personal_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(params.club, clientData.id, amountShekels, payRes.isSuccess ? 'SUCCESS' : 'FAILED', logMsg, apiPhone, clientName, personalId)
-    .run();
+  await logPurchase(env, {
+    clubId: params.club, clientId: clientData.id, amountAgorot, success: !!payRes.isSuccess, message: logMsg,
+    callerPhone: apiPhone, clientName, personalId, clientPhone: clientData.phone || null,
+    itemType: meta.itemType, startDate: meta.startDate, endDate: meta.endDate, cardLast4: meta.cardLast4,
+    source: 'phone'
+  });
 
   return { isSuccess: payRes.isSuccess, message: cleanedMessage };
 }
