@@ -1,7 +1,7 @@
 import { ensureSchema } from './schema.js';
 import { SCOPES, parseScopes, userAllowedScopes, effectiveKeyScopes } from './scopes.js';
 import { sha256Hex } from './public-api.js';
-import { queryPurchases, queryTerminalLogs, resolveTerminalClients } from './history.js';
+import { queryPurchases, queryTerminalLogs, queryAccountLogs, resolveTerminalClients } from './history.js';
 
 // אותו Client ID של גוגל כמו באתר סלומון (ניתן לדרוס עם משתנה סביבה GOOGLE_CLIENT_ID)
 export const DEFAULT_GOOGLE_CLIENT_ID = "89500817024-tbvsuu4dci6bqh173l65ua9lc65pe24p.apps.googleusercontent.com";
@@ -225,11 +225,11 @@ export async function handleSaasRequest(request, env) {
   }
 
   // היסטוריה מפורטת: רכישות ופעולות מסופים
-  if (request.method === 'GET' && (path === '/logs' || path === '/purchase-logs')) {
+  if (request.method === 'GET' && (path === '/logs' || path === '/purchase-logs' || path === '/account-logs')) {
     if (!currentUser.can_view_history && !currentUser.is_admin) {
       return jsonResponse({ success: false, message: "אין הרשאה לצפות בהיסטוריה" }, 403);
     }
-    const f = Object.fromEntries(['from', 'to', 'client_id', 'personal_id', 'phone', 'status', 'type', 'source', 'search', 'terminal_id', 'action', 'limit', 'offset'].map(k => [k, url.searchParams.get(k)]));
+    const f = Object.fromEntries(['from', 'to', 'client_id', 'personal_id', 'phone', 'status', 'type', 'source', 'search', 'terminal_id', 'action', 'event', 'limit', 'offset'].map(k => [k, url.searchParams.get(k)]));
     // מנהל רואה את כל המערכות (או מערכת מסוימת עם club_id), לקוח רק את המערכות שלו
     const scope = currentUser.is_admin
       ? (url.searchParams.get('club_id') ? { clubId: url.searchParams.get('club_id') } : { all: true })
@@ -240,6 +240,9 @@ export async function handleSaasRequest(request, env) {
       delete scope.userId;
     }
 
+    if (path === '/account-logs') {
+      return jsonResponse({ success: true, ...(await queryAccountLogs(env, scope, f)) });
+    }
     if (path === '/purchase-logs') {
       return jsonResponse({ success: true, ...(await queryPurchases(env, scope, f)) });
     }

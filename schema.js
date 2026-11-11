@@ -21,6 +21,24 @@ export async function ensureSchema(env) {
        last_used_at TEXT,
        created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE INDEX IF NOT EXISTS idx_api_keys_user ON saas_api_keys(user_id)`,
+    // יומן שינויים בחשבון לקוח (כרטיס אשראי, חידוש אוטומטי וכו')
+    `CREATE TABLE IF NOT EXISTS account_logs (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       club_id TEXT,
+       client_id TEXT,
+       client_name TEXT,
+       personal_id TEXT,
+       client_phone TEXT,
+       event TEXT NOT NULL,
+       details TEXT,
+       card_last4 TEXT,
+       status TEXT,
+       message TEXT,
+       source TEXT,
+       caller_phone TEXT,
+       api_key_name TEXT,
+       logged_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE INDEX IF NOT EXISTS idx_account_logs_club ON account_logs(club_id, logged_at)`,
   ];
   for (const sql of statements) await env.DB.prepare(sql).run();
 

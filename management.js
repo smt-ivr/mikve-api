@@ -1,3 +1,5 @@
+import { logAccountChange, diffClientEvents } from './history.js';
+
 const BASE_URL = "https://prod.xn--8dbba8a7b.com";
 
 // משיכת פרמטרים רגילה
@@ -81,6 +83,23 @@ function getMainMenuPrompt(clientData, currentCard, nextIdx, apiResponsePrefix =
 
 export async function processManagementFlow(clientData, params, token, env) {
   const clientId = clientData.id;
+  // רישום ביומן שינויים בחשבון
+  const logEvt = (event, success, extra = {}) => logAccountChange(env, {
+    clubId: params.club, client: clientData, event, success, source: 'phone', callerPhone: params.ApiPhone || '', ...extra
+  });
+  // שינוי הגדרות חידוש אוטומטי + רישום
+  const patchClient = async (patchPayload) => {
+    const before = { ...clientData };
+    const req = await fetch(`${BASE_URL}/Client/${clientId}`, {
+      method: 'PATCH',
+      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(patchPayload)
+    });
+    for (const e of diffClientEvents(before, patchPayload).filter(e => e.event !== 'client_updated')) {
+      await logEvt(e.event, req.ok, { details: e.details, message: req.ok ? null : `HTTP ${req.status}` });
+    }
+    return req;
+  };
 
   // משיכת סטטוס כרטיס אשראי עדכני בכל כניסה
   const cardsRes = await fetch(`${BASE_URL}/CreditCard/GetByClientId/${clientId}`, {
@@ -181,6 +200,8 @@ export async function processManagementFlow(clientData, params, token, env) {
             body: JSON.stringify(newCardPayload)
         });
 
+        await logEvt('card_added', saveReq.ok, { cardLast4: fourDigits, details: { card_exp: lastCcExp }, message: saveReq.ok ? null : `HTTP ${saveReq.status}` });
+
         if (saveReq.ok) {
             return getMainMenuPrompt(clientData, { fourDigits }, cycle + 1, "t-אמצעי התשלום נשמר בהצלחה במערכת");
         } else {
@@ -196,6 +217,9 @@ export async function processManagementFlow(clientData, params, token, env) {
             method: 'DELETE',
             headers: { "Authorization": `Bearer ${token}` }
         });
+
+        const deletedLast4 = currentCard ? String(currentCard.fourDigits || currentCard.cardNumber || '').slice(-4) : null;
+        await logEvt('card_deleted', delReq.status === 204 || delReq.ok, { cardLast4: deletedLast4, message: (delReq.status === 204 || delReq.ok) ? null : `HTTP ${delReq.status}` });
 
         if (delReq.status === 204 || delReq.ok) {
             return getMainMenuPrompt(clientData, null, cycle + 1, "t-אמצעי התשלום נמחק בהצלחה");
@@ -230,11 +254,7 @@ export async function processManagementFlow(clientData, params, token, env) {
         
         if (confirms[0] === '1') {
             const patchPayload = { ...clientData, autoRenewSubscription: !clientData.autoRenewSubscription };
-            const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
-                method: 'PATCH',
-                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-                body: JSON.stringify(patchPayload)
-            });
+            const patchReq = await patchClient(patchPayload);
 
             if (patchReq.ok) clientData.autoRenewSubscription = !clientData.autoRenewSubscription;
 
@@ -257,11 +277,7 @@ export async function processManagementFlow(clientData, params, token, env) {
 
         if (confirms[0] === '1') {
             const patchPayload = { ...clientData, autoRenewLicence: !clientData.autoRenewLicence };
-            const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
-                method: 'PATCH',
-                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-                body: JSON.stringify(patchPayload)
-            });
+            const patchReq = await patchClient(patchPayload);
 
             if (patchReq.ok) clientData.autoRenewLicence = !clientData.autoRenewLicence;
 
@@ -294,11 +310,7 @@ export async function processManagementFlow(clientData, params, token, env) {
             if (lastConfirm === '1') {
                 // ביטול פעימות
                 const patchPayload = { ...clientData, autoRenewCredit: false, autoRenewCreditAmount: null };
-                const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
-                    method: 'PATCH',
-                    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-                    body: JSON.stringify(patchPayload)
-                });
+                const patchReq = await patchClient(patchPayload);
 
                 if (patchReq.ok) {
                     clientData.autoRenewCredit = false;
@@ -323,11 +335,7 @@ export async function processManagementFlow(clientData, params, token, env) {
                 }
                 
                 const patchPayload = { ...clientData, autoRenewCredit: true, autoRenewCreditAmount: amountAgorot };
-                const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
-                    method: 'PATCH',
-                    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-                    body: JSON.stringify(patchPayload)
-                });
+                const patchReq = await patchClient(patchPayload);
 
                 if (patchReq.ok) clientData.autoRenewCreditAmount = amountAgorot;
 
@@ -351,11 +359,7 @@ export async function processManagementFlow(clientData, params, token, env) {
                 }
                 
                 const patchPayload = { ...clientData, autoRenewCredit: true, autoRenewCreditAmount: amountAgorot };
-                const patchReq = await fetch(`${BASE_URL}/Client/${clientId}`, {
-                    method: 'PATCH',
-                    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-                    body: JSON.stringify(patchPayload)
-                });
+                const patchReq = await patchClient(patchPayload);
 
                 if (patchReq.ok) {
                     clientData.autoRenewCredit = true;
