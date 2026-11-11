@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMTI - מערכת ניהול</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+:root{
+  --bg:#f3f5f9; --surface:#fff; --surface-2:#f8fafc; --border:#e3e8ef; --text:#1e293b; --muted:#64748b;
+  --primary:#2563eb; --primary-600:#1d4ed8; --primary-soft:#e8efff; --danger:#dc2626; --danger-soft:#fdecec;
+  --success:#16a34a; --success-soft:#e7f7ec; --warn:#b45309; --warn-soft:#fff4e0;
+  --sidebar:#0f172a; --sidebar-text:#cbd5e1; --radius:12px; --shadow:0 1px 2px rgba(15,23,42,.06),0 4px 16px rgba(15,23,42,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0b1120; --surface:#111827; --surface-2:#0f172a; --border:#1f2a3c; --text:#e5e7eb; --muted:#94a3b8;
+    --primary:#3b82f6; --primary-600:#2563eb; --primary-soft:#172554; --danger-soft:#3b1414; --success-soft:#0f2a1a; --warn-soft:#2e2108;
+    --sidebar:#070b16; --shadow:none; }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Heebo',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.5}
+a{color:var(--primary)}
+.hidden{display:none !important}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;direction:ltr;unicode-bidi:embed}
+
+/* Login */
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;
+  background:radial-gradient(1200px 600px at 100% 0%,rgba(37,99,235,.18),transparent),radial-gradient(900px 500px at 0% 100%,rgba(14,165,233,.15),transparent),var(--bg)}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:var(--shadow);width:100%;max-width:410px;padding:36px 32px;text-align:center}
+.brand-badge{width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,var(--primary),#0ea5e9);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:14px}
+.login-card h1{font-size:22px;margin-bottom:4px}
+.login-card p.sub{color:var(--muted);margin-bottom:24px}
+#google-btn{display:flex;justify-content:center;min-height:44px}
+.divider{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px;margin:20px 0}
+.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--border)}
+.link-btn{background:none;border:none;color:var(--primary);cursor:pointer;font:inherit;font-size:14px}
+
+/* Forms */
+.field{display:flex;flex-direction:column;gap:6px;text-align:right;margin-bottom:14px}
+.field label{font-size:13px;font-weight:600;color:var(--muted)}
+input[type=text],input[type=email],input[type=password],input[type=number],select{
+  width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);font:inherit;outline:none;transition:border .15s,box-shadow .15s}
+input:focus,select:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 16px;border-radius:10px;border:1px solid transparent;font:inherit;font-weight:600;cursor:pointer;transition:.15s;white-space:nowrap}
+.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-600)}
+.btn-ghost{background:var(--surface);border-color:var(--border);color:var(--text)}.btn-ghost:hover{background:var(--surface-2)}
+.btn-danger{background:var(--danger-soft);color:var(--danger)}.btn-danger:hover{background:var(--danger);color:#fff}
+.btn-sm{padding:6px 10px;font-size:13px;border-radius:8px}
+.btn-block{width:100%}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.grid-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;align-items:end}
+.grid-form .field{margin:0}
+.check{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.check input{width:16px;height:16px;accent-color:var(--primary)}
+
+/* Layout */
+#app{display:flex;min-height:100vh}
+.sidebar{width:250px;background:var(--sidebar);color:var(--sidebar-text);display:flex;flex-direction:column;position:fixed;inset:0 0 0 auto;z-index:20;transition:transform .2s}
+.sidebar .logo{display:flex;align-items:center;gap:12px;padding:22px 20px;color:#fff;font-weight:700;font-size:18px}
+.sidebar .logo small{display:block;font-weight:400;font-size:12px;color:var(--sidebar-text)}
+.sidebar .logo .brand-badge{width:40px;height:40px;font-size:18px;margin:0;border-radius:10px}
+.nav{list-style:none;padding:8px 12px;flex:1;overflow:auto}
+.nav .section{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;padding:14px 10px 6px}
+.nav button{width:100%;display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;background:none;border:none;color:var(--sidebar-text);font:inherit;cursor:pointer;text-align:right}
+.nav button i{width:18px;text-align:center;opacity:.85}
+.nav button:hover{background:rgba(255,255,255,.06);color:#fff}
+.nav button.active{background:rgba(59,130,246,.18);color:#fff}
+.user-box{display:flex;align-items:center;gap:10px;padding:14px 16px;border-top:1px solid rgba(255,255,255,.08)}
+.avatar{width:36px;height:36px;border-radius:50%;background:#334155;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;overflow:hidden;flex-shrink:0}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.user-box .meta{flex:1;min-width:0}
+.user-box .meta div{color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-box .meta small{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-box button{background:none;border:none;color:var(--sidebar-text);cursor:pointer;font-size:16px;padding:6px}
+.user-box button:hover{color:#fff}
+.main{flex:1;margin-right:250px;padding:28px 32px;min-width:0}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px}
+.topbar h2{font-size:24px}
+.topbar p{color:var(--muted);font-size:14px}
+#menu-toggle{display:none}
+.backdrop{display:none}
+
+/* Cards & tables */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:18px}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.card-head h3{font-size:17px}
+.card-head p{color:var(--muted);font-size:13px}
+.table-wrap{overflow-x:auto;margin:0 -20px;padding:0 20px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;text-align:right;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.empty{text-align:center;color:var(--muted);padding:28px 12px}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);margin:2px}
+.chip.ok{background:var(--success-soft);color:var(--success);border-color:transparent}
+.chip.bad{background:var(--danger-soft);color:var(--danger);border-color:transparent}
+.chip.blue{background:var(--primary-soft);color:var(--primary);border-color:transparent}
+.secret{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:4px 6px 4px 10px;max-width:100%}
+.secret code{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.icon-btn{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:6px}
+.icon-btn:hover{background:var(--border);color:var(--text)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
+.stat small{color:var(--muted);font-size:13px}
+.stat div{font-size:26px;font-weight:700;margin-top:2px}
+.notice{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:10px;font-size:14px;margin-bottom:14px}
+.notice.warn{background:var(--warn-soft);color:var(--warn)}
+.notice.info{background:var(--primary-soft);color:var(--primary)}
+.notice.ok{background:var(--success-soft);color:var(--success)}
+.scope-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}
+.scope-item{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--surface)}
+.scope-item:hover{border-color:var(--primary)}
+.scope-item input{margin-top:3px;accent-color:var(--primary)}
+.scope-item b{display:block;font-size:13px;direction:ltr;text-align:right}
+.scope-item span{font-size:13px;color:var(--muted)}
+.scope-item.disabled{opacity:.45;cursor:not-allowed}
+.preset-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+
+/* Modal */
+.modal{position:fixed;inset:0;background:rgba(2,6,23,.55);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
+.modal-box{background:var(--surface);border-radius:16px;width:100%;max-width:560px;max-height:92vh;overflow:auto;padding:24px;border:1px solid var(--border)}
+.modal-box h3{font-size:18px;margin-bottom:16px}
+.modal-actions{display:flex;gap:10px;justify-content:flex-start;margin-top:18px}
+
+/* Toast */
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;background:#0f172a;color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;transition:.25s;z-index:200;pointer-events:none;max-width:90vw}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.error{background:var(--danger)}
+
+/* Docs */
+.endpoint{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed var(--border);flex-wrap:wrap}
+.endpoint:last-child{border-bottom:none}
+.method{font-family:ui-monospace,monospace;font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px;min-width:56px;text-align:center}
+.m-get{background:var(--success-soft);color:var(--success)}.m-post{background:var(--primary-soft);color:var(--primary)}.m-patch{background:var(--warn-soft);color:var(--warn)}
+pre{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:14px;overflow:auto;font-size:13px;direction:ltr;text-align:left}
+
+@media (max-width: 900px){
+  .sidebar{transform:translateX(100%)}
+  body.menu-open .sidebar{transform:none}
+  body.menu-open .backdrop{display:block;position:fixed;inset:0;background:rgba(2,6,23,.5);z-index:15}
+  .main{margin-right:0;padding:18px 16px}
+  #menu-toggle{display:inline-flex}
+  .topbar h2{font-size:20px}
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="brand-badge"><i class="fa-solid fa-phone-volume"></i></div>
+    <h1>SMTI מערכות טלפוניות</h1>
+    <p class="sub">התחברו לניהול המערכות, המפתחות וההרשאות</p>
+
+    <div id="google-btn"></div>
+    <div id="login-msg" class="notice hidden" style="margin-top:14px"></div>
+
+    <div class="divider">או</div>
+    <button class="link-btn" id="toggle-pass-login"><i class="fa-regular fa-envelope"></i> כניסה עם מייל וסיסמה</button>
+    <form id="pass-login" class="hidden" style="margin-top:16px">
+      <div class="field"><label>דואר אלקטרוני</label><input type="email" id="login-email" autocomplete="username" required></div>
+      <div class="field"><label>סיסמה</label><input type="password" id="login-password" autocomplete="current-password" required></div>
+      <button class="btn btn-primary btn-block" type="submit">כניסה</button>
+    </form>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div id="app" class="hidden">
+  <aside class="sidebar">
+    <div class="logo"><div class="brand-badge"><i class="fa-solid fa-phone-volume"></i></div><div>SMTI<small>מערכות טלפוניות</small></div></div>
+    <ul class="nav" id="nav">
+      <li class="section">כללי</li>
+      <li><button data-view="systems" class="active"><i class="fa-solid fa-server"></i> המערכות שלי</button></li>
+      <li><button data-view="keys"><i class="fa-solid fa-key"></i> מפתחות API</button></li>
+      <li class="need-history"><button data-view="history"><i class="fa-solid fa-clock-rotate-left"></i> היסטוריית מסופים</button></li>
+      <li><button data-view="docs"><i class="fa-solid fa-book"></i> תיעוד API</button></li>
+      <li class="section need-admin">ניהול</li>
+      <li class="need-admin"><button data-view="users"><i class="fa-solid fa-users"></i> לקוחות והרשאות</button></li>
+      <li class="need-admin"><button data-view="all-tokens"><i class="fa-solid fa-network-wired"></i> כל המערכות</button></li>
+      <li class="need-admin"><button data-view="all-keys"><i class="fa-solid fa-shield-halved"></i> כל מפתחות ה-API</button></li>
+    </ul>
+    <div class="user-box">
+      <div class="avatar" id="user-avatar"></div>
+      <div class="meta"><div id="user-name"></div><small id="user-email"></small></div>
+      <button id="logout-btn" title="התנתקות"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+    </div>
+  </aside>
+  <div class="backdrop" id="backdrop"></div>
+
+  <main class="main">
+    <div class="topbar">
+      <div><h2 id="page-title">המערכות שלי</h2><p id="page-sub"></p></div>
+      <button class="btn btn-ghost" id="menu-toggle"><i class="fa-solid fa-bars"></i></button>
+    </div>
+
+    <!-- Systems -->
+    <section data-section="systems">
+      <div class="stats">
+        <div class="stat"><small>מערכות מחוברות</small><div id="stat-systems">0</div></div>
+        <div class="stat"><small>מכסה</small><div id="stat-quota">0</div></div>
+        <div class="stat"><small>הרשאות</small><div id="stat-perms" style="font-size:14px;font-weight:500;margin-top:8px"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h3>חיבור מערכת חדשה</h3><p>פרטי ההתחברות למערכת הניהול. לאחר היצירה תקבלו טוקן להגדרה בימות המשיח.</p></div></div>
+        <form id="new-system" class="grid-form">
+          <div class="field"><label>שם מזהה</label><input type="text" id="tk-label" required></div>
+          <div class="field"><label>Club ID</label><input type="text" id="tk-club" required></div>
+          <div class="field"><label>שם משתמש</label><input type="text" id="tk-user" required></div>
+          <div class="field"><label>סיסמה</label><input type="password" id="tk-pass" required></div>
+          <button class="btn btn-primary" type="submit"><i class="fa-solid fa-plus"></i> צור</button>
+        </form>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>המערכות שלי</h3></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>שם</th><th>Club ID</th><th>משתמש</th><th>טוקן לימות המשיח</th><th></th></tr></thead>
+          <tbody id="systems-body"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- API keys -->
+    <section data-section="keys" class="hidden">
+      <div id="keys-no-perm" class="notice warn hidden"><i class="fa-solid fa-lock"></i><div>לחשבון שלך עדיין לא אושרה גישת API. פנה למנהל המערכת כדי שיאשר לך הרשאות.</div></div>
+      <div id="new-key-result" class="card hidden" style="border-color:var(--success)">
+        <div class="notice ok"><i class="fa-solid fa-circle-check"></i><div><b>המפתח נוצר.</b> העתיקו אותו עכשיו – הוא לא יוצג שוב.</div></div>
+        <div class="secret" style="width:100%"><code id="new-key-value" style="max-width:none;flex:1"></code><button class="icon-btn" data-copy-from="new-key-value" title="העתק"><i class="fa-regular fa-copy"></i></button></div>
+      </div>
+      <div class="card" id="new-key-card">
+        <div class="card-head"><div><h3>יצירת מפתח API</h3><p>המפתח מאפשר לתוכנה חיצונית (או AI) לטעון נתונים ולבצע פעולות במערכת שתבחרו, לפי ההרשאות שתסמנו.</p></div></div>
+        <form id="new-key-form">
+          <div class="grid-form" style="margin-bottom:14px">
+            <div class="field"><label>שם המפתח</label><input type="text" id="key-name" placeholder="לדוגמה: אתר הזמנות" required></div>
+            <div class="field"><label>מערכת</label><select id="key-system" required></select></div>
+          </div>
+          <div class="field" style="margin-bottom:8px"><label>הרשאות</label></div>
+          <div class="preset-row">
+            <button type="button" class="btn btn-ghost btn-sm" data-preset="read">קריאה בלבד</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-preset="purchases">רכישות בלבד</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-preset="terminals">מסופים בלבד</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-preset="all">גישה מלאה</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-preset="none">נקה</button>
+          </div>
+          <div class="scope-grid" id="key-scopes"></div>
+          <div style="margin-top:16px"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-key"></i> צור מפתח</button></div>
+        </form>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>המפתחות שלי</h3><a class="btn btn-ghost btn-sm" href="#" data-download-docs><i class="fa-solid fa-download"></i> הורד תיעוד</a></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>שם</th><th>מפתח</th><th>מערכת</th><th>הרשאות</th><th>שימוש אחרון</th><th></th></tr></thead>
+          <tbody id="keys-body"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- History -->
+    <section data-section="history" class="hidden">
+      <div class="card">
+        <div class="card-head"><h3>יומן פעולות מסופים</h3><button class="btn btn-ghost btn-sm" id="refresh-history"><i class="fa-solid fa-rotate"></i> רענון</button></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>תאריך ושעה</th><th>מערכת</th><th>מסוף</th><th>פעולה</th><th>מקור</th><th>סטטוס</th></tr></thead>
+          <tbody id="history-body"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- Docs -->
+    <section data-section="docs" class="hidden">
+      <div class="card">
+        <div class="card-head">
+          <div><h3>תיעוד API</h3><p>קובץ Markdown מלא עם כל הנתיבים, ההרשאות ודוגמאות קוד – אפשר להעביר אותו כמו שהוא ל-ChatGPT / Claude.</p></div>
+          <div class="actions">
+            <a class="btn btn-primary" href="#" data-download-docs><i class="fa-solid fa-download"></i> הורדת התיעוד (.md)</a>
+            <button class="btn btn-ghost" id="copy-docs"><i class="fa-regular fa-copy"></i> העתק ל-AI</button>
+          </div>
+        </div>
+        <div class="field"><label>Base URL</label><div class="secret"><code id="base-url"></code><button class="icon-btn" data-copy-from="base-url"><i class="fa-regular fa-copy"></i></button></div></div>
+        <div class="field"><label>אימות</label><code>Authorization: Bearer mk_live_...</code></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>נתיבים</h3></div>
+        <div id="endpoint-list"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>דוגמה</h3></div>
+        <pre id="docs-example"></pre>
+      </div>
+    </section>
+
+    <!-- Admin: users -->
+    <section data-section="users" class="hidden">
+      <div class="card">
+        <div class="card-head"><div><h3>הוספת לקוח</h3><p>לקוח יכול להתחבר עם גוגל באותו מייל. סיסמה היא אופציונלית.</p></div></div>
+        <form id="new-user" class="grid-form">
+          <div class="field"><label>שם מלא</label><input type="text" id="nu-name"></div>
+          <div class="field"><label>דואר אלקטרוני</label><input type="email" id="nu-email" required></div>
+          <div class="field"><label>סיסמה (אופציונלי)</label><input type="text" id="nu-pass"></div>
+          <div class="field"><label>מכסת מערכות</label><input type="number" id="nu-max" value="1" min="1"></div>
+          <button class="btn btn-primary" type="submit"><i class="fa-solid fa-user-plus"></i> הוסף</button>
+        </form>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>לקוחות</h3><input type="text" id="users-filter" placeholder="חיפוש..." style="max-width:220px"></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>לקוח</th><th>מכסה</th><th>טלפוני</th><th>API</th><th></th></tr></thead>
+          <tbody id="users-body"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- Admin: all tokens -->
+    <section data-section="all-tokens" class="hidden">
+      <div class="card">
+        <div class="card-head"><h3>כל המערכות</h3></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>בעלים</th><th>שם</th><th>Club ID</th><th>משתמש</th><th>טוקן</th><th></th></tr></thead>
+          <tbody id="all-tokens-body"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- Admin: all keys -->
+    <section data-section="all-keys" class="hidden">
+      <div class="card">
+        <div class="card-head"><h3>כל מפתחות ה-API הפעילים</h3></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>בעלים</th><th>שם</th><th>מפתח</th><th>מערכת</th><th>הרשאות</th><th>שימוש אחרון</th><th></th></tr></thead>
+          <tbody id="all-keys-body"></tbody>
+        </table></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ===================== MODALS ===================== -->
+<div class="modal hidden" id="modal-system">
+  <form class="modal-box" id="edit-system-form">
+    <h3>עריכת מערכת</h3>
+    <input type="hidden" id="es-id">
+    <div class="field"><label>שם מזהה</label><input type="text" id="es-label" required></div>
+    <div class="field"><label>Club ID</label><input type="text" id="es-club" required></div>
+    <div class="field"><label>שם משתמש</label><input type="text" id="es-user" required></div>
+    <div class="field"><label>סיסמה</label><input type="text" id="es-pass" required></div>
+    <div class="modal-actions"><button class="btn btn-primary" type="submit">שמירה</button><button class="btn btn-ghost" type="button" data-close>ביטול</button></div>
+  </form>
+</div>
+
+<div class="modal hidden" id="modal-user">
+  <form class="modal-box" id="edit-user-form">
+    <h3>הרשאות לקוח</h3>
+    <input type="hidden" id="eu-id">
+    <div class="grid-form" style="margin-bottom:16px">
+      <div class="field"><label>שם</label><input type="text" id="eu-name"></div>
+      <div class="field"><label>מכסת מערכות</label><input type="number" id="eu-max" min="1"></div>
+    </div>
+    <div class="field"><label>מערכת טלפונית (ימות המשיח)</label></div>
+    <div class="actions" style="gap:16px;margin-bottom:18px">
+      <label class="check"><input type="checkbox" id="eu-payment"> סליקה</label>
+      <label class="check"><input type="checkbox" id="eu-terminal"> מסופים</label>
+      <label class="check"><input type="checkbox" id="eu-history"> היסטוריה</label>
+    </div>
+    <div class="field" style="margin-bottom:8px"><label>הרשאות API שהלקוח רשאי להעניק למפתחות שלו</label></div>
+    <div class="preset-row">
+      <button type="button" class="btn btn-ghost btn-sm" data-upreset="read">קריאה בלבד</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-upreset="purchases">רכישות בלבד</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-upreset="terminals">מסופים בלבד</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-upreset="all">API מלא</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-upreset="none">ללא API</button>
+    </div>
+    <div class="scope-grid" id="eu-scopes"></div>
+    <div class="modal-actions"><button class="btn btn-primary" type="submit">שמירה</button><button class="btn btn-ghost" type="button" data-close>ביטול</button></div>
+  </form>
+</div>
+
+<div class="modal hidden" id="modal-transfer">
+  <form class="modal-box" id="transfer-form">
+    <h3>העברת בעלות על מערכת</h3>
+    <input type="hidden" id="tr-id">
+    <div class="field"><label>לקוח חדש</label><select id="tr-user" required></select></div>
+    <p style="color:var(--muted);font-size:13px">מפתחות API של הבעלים הקודם על מערכת זו יבוטלו.</p>
+    <div class="modal-actions"><button class="btn btn-primary" type="submit">העבר</button><button class="btn btn-ghost" type="button" data-close>ביטול</button></div>
+  </form>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+  var API = location.origin + "/mikve/api";
+  var DOCS_URL = location.origin + "/mikve/docs/api.md";
+  var state = { session: null, user: null, config: null, systems: [], users: [] };
+  try { state.session = localStorage.getItem("mikve_session"); } catch (e) {}
+
+  var PRESETS = {
+    read: ["club:read", "clients:read", "purchases:read", "terminals:read"],
+    purchases: ["clients:read", "purchases:read", "purchases:write"],
+    terminals: ["terminals:read", "terminals:control"],
+    all: "ALL", none: []
+  };
+  var SCOPE_LABELS = {};
+
+  // ---------- helpers ----------
+  function $(id) { return document.getElementById(id); }
+  function esc(v) { return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function toast(msg, isErr) {
+    var t = $("toast"); t.textContent = msg; t.className = "show" + (isErr ? " error" : "");
+    clearTimeout(t._h); t._h = setTimeout(function () { t.className = ""; }, 3000);
+  }
+  function fmtDate(v) { if (!v) return "—"; var d = new Date(String(v).replace(" ", "T") + (String(v).indexOf("Z") < 0 && String(v).indexOf("+") < 0 ? "Z" : "")); return isNaN(d) ? esc(v) : d.toLocaleString("he-IL"); }
+  function scopeChips(list) {
+    if (!list || !list.length) return '<span class="chip bad">ללא</span>';
+    if (list.indexOf("*") >= 0 || (state.config && list.length === state.config.scopes.length)) return '<span class="chip blue">גישה מלאה</span>';
+    return list.map(function (s) { return '<span class="chip" title="' + esc(SCOPE_LABELS[s] || "") + '">' + esc(s) + "</span>"; }).join("");
+  }
+  function emptyRow(cols, text) { return '<tr><td colspan="' + cols + '" class="empty">' + esc(text) + "</td></tr>"; }
+
+  async function api(path, opts) {
+    opts = opts || {};
+    var headers = { "Content-Type": "application/json" };
+    if (state.session) headers.Authorization = "Bearer " + state.session;
+    var res = await fetch(API + path, { method: opts.method || "GET", headers: headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
+    var data = {}; try { data = await res.json(); } catch (e) {}
+    if (res.status === 401 && path !== "/login" && path !== "/login/google") { logout(true); throw new Error("החיבור פג תוקף"); }
+    if (!res.ok || data.success === false) throw new Error(data.message || "שגיאה");
+    return data;
+  }
+
+  // ---------- login ----------
+  function showLoginMsg(msg, type) { var el = $("login-msg"); el.className = "notice " + (type || "warn"); el.textContent = msg; }
+
+  async function loadConfig() {
+    if (state.config) return state.config;
+    var r = await fetch(API + "/config"); state.config = await r.json();
+    state.config.scopes.forEach(function (s) { SCOPE_LABELS[s.id] = s.label; });
+    return state.config;
+  }
+
+  function initGoogle() {
+    if (!window.google || !google.accounts) { setTimeout(initGoogle, 300); return; }
+    google.accounts.id.initialize({ client_id: state.config.google_client_id, callback: onGoogleCredential, ux_mode: "popup" });
+    var w = Math.min(340, $("google-btn").offsetWidth || 340);
+    google.accounts.id.renderButton($("google-btn"), { theme: "outline", size: "large", text: "continue_with", shape: "pill", width: w, locale: "he" });
+  }
+
+  async function onGoogleCredential(resp) {
+    showLoginMsg("מאמת מול גוגל...", "info");
+    try {
+      var d = await api("/login/google", { method: "POST", body: { credential: resp.credential } });
+      startSession(d.token, d.user);
+    } catch (e) { showLoginMsg(e.message, "warn"); }
+  }
+
+  $("toggle-pass-login").onclick = function () { $("pass-login").classList.toggle("hidden"); };
+  $("pass-login").onsubmit = async function (e) {
+    e.preventDefault();
+    try {
+      var d = await api("/login", { method: "POST", body: { email: $("login-email").value.trim(), password: $("login-password").value } });
+      startSession(d.token, d.user);
+    } catch (err) { showLoginMsg(err.message, "warn"); }
+  };
+
+  function startSession(token, user) {
+    state.session = token; state.user = user;
+    try { localStorage.setItem("mikve_session", token); localStorage.removeItem("saas_auth_token"); } catch (e) {}
+    $("login-password").value = "";
+    renderApp();
+  }
+
+  function logout(silent) {
+    if (state.session && !silent) { api("/logout", { method: "POST" }).catch(function () {}); }
+    state.session = null; state.user = null;
+    try { localStorage.removeItem("mikve_session"); } catch (e) {}
+    $("app").classList.add("hidden"); $("login-screen").classList.remove("hidden");
+    $("login-msg").className = "notice hidden";
+    if (window.google && google.accounts) google.accounts.id.disableAutoSelect();
+  }
+  $("logout-btn").onclick = function () { logout(false); };
+
+  // ---------- layout ----------
+  var TITLES = {
+    systems: ["המערכות שלי", "חיבורי המערכות לימות המשיח"],
+    keys: ["מפתחות API", "גישה תכנותית לנתונים לפי הרשאות"],
+    history: ["היסטוריית מסופים", "100 הפעולות האחרונות"],
+    docs: ["תיעוד API", "כל מה שצריך כדי להתחבר"],
+    users: ["לקוחות והרשאות", "אישור הרשאות טלפוניות וגישת API"],
+    "all-tokens": ["כל המערכות", "ניהול מערכות של כל הלקוחות"],
+    "all-keys": ["כל מפתחות ה-API", "צפייה וביטול מפתחות של כל הלקוחות"]
+  };
+  var LOADERS = {};
+
+  function go(view) {
+    document.querySelectorAll("[data-section]").forEach(function (s) { s.classList.toggle("hidden", s.getAttribute("data-section") !== view); });
+    document.querySelectorAll("#nav button").forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-view") === view); });
+    $("page-title").textContent = TITLES[view][0]; $("page-sub").textContent = TITLES[view][1];
+    document.body.classList.remove("menu-open");
+    if (LOADERS[view]) LOADERS[view]().catch(function (e) { toast(e.message, true); });
+  }
+  document.querySelectorAll("#nav button").forEach(function (b) { b.onclick = function () { go(b.getAttribute("data-view")); }; });
+  $("menu-toggle").onclick = function () { document.body.classList.toggle("menu-open"); };
+  $("backdrop").onclick = function () { document.body.classList.remove("menu-open"); };
+  document.querySelectorAll("[data-close]").forEach(function (b) { b.onclick = closeModals; });
+  document.querySelectorAll(".modal").forEach(function (m) { m.addEventListener("click", function (e) { if (e.target === m) closeModals(); }); });
+  function closeModals() { document.querySelectorAll(".modal").forEach(function (m) { m.classList.add("hidden"); }); }
+  function openModal(id) { $(id).classList.remove("hidden"); }
+
+  // copy buttons
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-copy-from],[data-copy]"); if (!b) return;
+    var text = b.hasAttribute("data-copy") ? b.getAttribute("data-copy") : $(b.getAttribute("data-copy-from")).textContent;
+    navigator.clipboard.writeText(text).then(function () { toast("הועתק"); });
+  });
+  document.querySelectorAll("[data-download-docs]").forEach(function (a) { a.href = DOCS_URL + "?download=1"; });
+
+  function renderApp() {
+    var u = state.user;
+    $("login-screen").classList.add("hidden"); $("app").classList.remove("hidden");
+    $("user-name").textContent = u.name || u.email; $("user-email").textContent = u.email;
+    $("user-avatar").innerHTML = u.avatar_url ? '<img src="' + esc(u.avatar_url) + '" alt="" referrerpolicy="no-referrer">' : esc((u.name || u.email || "?").trim().charAt(0).toUpperCase());
+    document.querySelectorAll(".need-admin").forEach(function (el) { el.classList.toggle("hidden", !u.is_admin); });
+    document.querySelectorAll(".need-history").forEach(function (el) { el.classList.toggle("hidden", !(u.is_admin || u.can_view_history)); });
+    $("base-url").textContent = location.origin + "/mikve/api/v1";
+    go("systems");
+  }
+
+  // ---------- systems ----------
+  LOADERS.systems = async function () {
+    var d = await api("/tokens"); state.systems = d.tokens || [];
+    var u = state.user;
+    $("stat-systems").textContent = state.systems.length;
+    $("stat-quota").textContent = state.systems.length + " / " + u.max_tokens;
+    var perms = [];
+    if (u.can_use_payment) perms.push('<span class="chip ok">סליקה</span>');
+    if (u.can_use_terminal) perms.push('<span class="chip ok">מסופים</span>');
+    if ((u.allowed_api_scopes || []).length) perms.push('<span class="chip blue">API</span>');
+    $("stat-perms").innerHTML = perms.join("") || '<span class="chip">אין הרשאות עדיין</span>';
+    $("systems-body").innerHTML = state.systems.length ? state.systems.map(function (t) {
+      return "<tr><td><b>" + esc(t.label) + "</b></td><td class='mono'>" + esc(t.target_club_id) + "</td><td>" + esc(t.target_username) + "</td>" +
+        '<td><div class="secret"><code>' + esc(t.token) + '</code><button class="icon-btn" data-copy="' + esc(t.token) + '" title="העתק"><i class="fa-regular fa-copy"></i></button></div></td>' +
+        '<td><div class="actions"><button class="btn btn-ghost btn-sm" data-edit-system="' + t.id + '"><i class="fa-solid fa-pen"></i></button>' +
+        '<button class="btn btn-danger btn-sm" data-del-system="' + t.id + '"><i class="fa-solid fa-trash"></i></button></div></td></tr>';
+    }).join("") : emptyRow(5, "עדיין לא חוברו מערכות");
+  };
+  $("new-system").onsubmit = async function (e) {
+    e.preventDefault();
+    try {
+      await api("/tokens", { method: "POST", body: { label: $("tk-label").value, club_id: $("tk-club").value, username: $("tk-user").value, password: $("tk-pass").value } });
+      e.target.reset(); toast("המערכת נוצרה"); LOADERS.systems();
+    } catch (err) { toast(err.message, true); }
+  };
+  $("systems-body").onclick = async function (e) {
+    var ed = e.target.closest("[data-edit-system]"), del = e.target.closest("[data-del-system]");
+    if (ed) {
+      var t = state.systems.find(function (x) { return String(x.id) === ed.getAttribute("data-edit-system"); });
+      $("es-id").value = t.id; $("es-label").value = t.label; $("es-club").value = t.target_club_id; $("es-user").value = t.target_username; $("es-pass").value = t.target_password;
+      openModal("modal-system");
+    }
+    if (del) {
+      if (!confirm("מחיקת המערכת תנתק מיידית את המערכת הטלפונית ותבטל את מפתחות ה-API שלה. להמשיך?")) return;
+      try { await api("/tokens/" + del.getAttribute("data-del-system"), { method: "DELETE" }); toast("נמחק"); LOADERS.systems(); } catch (err) { toast(err.message, true); }
+    }
+  };
+  $("edit-system-form").onsubmit = async function (e) {
+    e.preventDefault();
+    try {
+      await api("/tokens/" + $("es-id").value + "/update", { method: "POST", body: { label: $("es-label").value, club_id: $("es-club").value, username: $("es-user").value, password: $("es-pass").value } });
+      closeModals(); toast("נשמר"); LOADERS.systems();
+    } catch (err) { toast(err.message, true); }
+  };
+
+  // ---------- scope pickers ----------
+  function renderScopePicker(containerId, selected, allowed) {
+    var sel = selected.indexOf("*") >= 0 ? state.config.scopes.map(function (s) { return s.id; }) : selected;
+    $(containerId).innerHTML = state.config.scopes.map(function (s) {
+      var dis = allowed && allowed.indexOf(s.id) < 0;
+      return '<label class="scope-item' + (dis ? " disabled" : "") + '"><input type="checkbox" value="' + esc(s.id) + '"' + (sel.indexOf(s.id) >= 0 && !dis ? " checked" : "") + (dis ? " disabled" : "") +
+        "><div><b>" + esc(s.id) + "</b><span>" + esc(s.label) + "</span></div></label>";
+    }).join("");
+  }
+  function pickedScopes(containerId) {
+    return Array.prototype.map.call($(containerId).querySelectorAll("input:checked"), function (i) { return i.value; });
+  }
+  function applyPreset(containerId, name) {
+    var p = PRESETS[name];
+    $(containerId).querySelectorAll("input").forEach(function (i) { if (!i.disabled) i.checked = p === "ALL" || p.indexOf(i.value) >= 0; });
+  }
+  document.querySelectorAll("[data-preset]").forEach(function (b) { b.onclick = function () { applyPreset("key-scopes", b.getAttribute("data-preset")); }; });
+  document.querySelectorAll("[data-upreset]").forEach(function (b) { b.onclick = function () { applyPreset("eu-scopes", b.getAttribute("data-upreset")); }; });
+
+  // ---------- API keys ----------
+  LOADERS.keys = async function () {
+    var results = await Promise.all([api("/api-keys"), api("/tokens")]);
+    var d = results[0]; state.systems = results[1].tokens || [];
+    var allowed = d.allowed_scopes || [];
+    $("keys-no-perm").classList.toggle("hidden", allowed.length > 0);
+    $("new-key-card").classList.toggle("hidden", allowed.length === 0);
+    $("key-system").innerHTML = state.systems.length
+      ? state.systems.map(function (t) { return '<option value="' + t.id + '">' + esc(t.label) + " (" + esc(t.target_club_id) + ")</option>"; }).join("")
+      : '<option value="">קודם צריך לחבר מערכת</option>';
+    renderScopePicker("key-scopes", [], allowed);
+    var keys = d.api_keys || [];
+    $("keys-body").innerHTML = keys.length ? keys.map(function (k) {
+      return "<tr><td><b>" + esc(k.name) + "</b></td><td><code>" + esc(k.key_prefix) + "…</code></td><td>" + esc(k.system_label || "—") + "</td><td>" + scopeChips(k.scopes) +
+        "</td><td>" + fmtDate(k.last_used_at) + '</td><td><button class="btn btn-danger btn-sm" data-revoke="' + k.id + '"><i class="fa-solid fa-ban"></i> בטל</button></td></tr>';
+    }).join("") : emptyRow(6, "אין מפתחות פעילים");
+  };
+  $("new-key-form").onsubmit = async function (e) {
+    e.preventDefault();
+    var scopes = pickedScopes("key-scopes");
+    if (!scopes.length) return toast("יש לבחור לפחות הרשאה אחת", true);
+    try {
+      var d = await api("/api-keys", { method: "POST", body: { name: $("key-name").value, token_id: parseInt($("key-system").value, 10), scopes: scopes } });
+      $("new-key-value").textContent = d.api_key; $("new-key-result").classList.remove("hidden");
+      $("key-name").value = ""; LOADERS.keys(); window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) { toast(err.message, true); }
+  };
+  $("keys-body").onclick = async function (e) {
+    var b = e.target.closest("[data-revoke]"); if (!b) return;
+    if (!confirm("לבטל את המפתח? כל תוכנה שמשתמשת בו תפסיק לעבוד מיידית.")) return;
+    try { await api("/api-keys/" + b.getAttribute("data-revoke"), { method: "DELETE" }); toast("המפתח בוטל"); LOADERS.keys(); } catch (err) { toast(err.message, true); }
+  };
+
+  // ---------- history ----------
+  LOADERS.history = async function () {
+    var d = await api("/logs"); var logs = d.logs || [];
+    $("history-body").innerHTML = logs.length ? logs.map(function (l) {
+      var ok = l.status === "SUCCESS";
+      return "<tr><td>" + fmtDate(l.timestamp) + "</td><td>" + esc(l.label) + "</td><td>" + esc(l.terminal_id) + "</td><td>" + esc(l.action_name) + "</td><td>" + esc(l.api_phone || "—") +
+        '</td><td><span class="chip ' + (ok ? "ok" : "bad") + '">' + (ok ? "הצלחה" : "נכשל") + "</span></td></tr>";
+    }).join("") : emptyRow(6, "לא נמצאו רשומות");
+  };
+  $("refresh-history").onclick = function () { LOADERS.history(); };
+
+  // ---------- docs ----------
+  var ENDPOINTS = [
+    ["GET", "/me", "—", "פרטי המפתח וההרשאות"],
+    ["GET", "/club", "club:read", "פרטי המערכת"],
+    ["GET", "/groups", "club:read", "קבוצות לקוחות"],
+    ["GET", "/clients", "clients:read", "רשימת לקוחות (phone / personal_id / search)"],
+    ["GET", "/clients/{id}", "clients:read", "פרטי לקוח"],
+    ["PATCH", "/clients/{id}", "clients:write", "עדכון לקוח"],
+    ["GET", "/clients/{id}/credit-cards", "cards:read", "כרטיסים שמורים (מוסתרים)"],
+    ["GET", "/clients/{id}/subscription-renewal", "purchases:read", "מחיר ותאריכי חידוש מנוי"],
+    ["GET", "/purchases", "purchases:read", "היסטוריית חיובים"],
+    ["POST", "/purchases", "purchases:write", "ביצוע חיוב"],
+    ["GET", "/terminals", "terminals:read", "רשימת מסופים"],
+    ["GET", "/terminals/{id}/status", "terminals:read", "סטטוס חיבור"],
+    ["POST", "/terminals/{id}/action", "terminals:control", "פקודה למסוף"],
+    ["GET", "/terminals/logs", "terminals:read", "יומן פעולות מסופים"]
+  ];
+  $("endpoint-list").innerHTML = ENDPOINTS.map(function (e) {
+    return '<div class="endpoint"><span class="method m-' + e[0].toLowerCase() + '">' + e[0] + "</span><code>" + esc(e[1]) + '</code><span class="chip">' + esc(e[2]) + '</span><span style="color:var(--muted);font-size:14px">' + esc(e[3]) + "</span></div>";
+  }).join("");
+  $("docs-example").textContent = 'curl -H "Authorization: Bearer mk_live_..." \\\n  "' + location.origin + '/mikve/api/v1/clients?phone=0501234567"';
+  $("copy-docs").onclick = async function () {
+    try { var t = await (await fetch(DOCS_URL)).text(); await navigator.clipboard.writeText(t); toast("התיעוד הועתק – הדביקו אותו בצ׳אט עם ה-AI"); }
+    catch (e) { toast("ההעתקה נכשלה", true); }
+  };
+
+  // ---------- admin: users ----------
+  LOADERS.users = async function () { var d = await api("/users"); state.users = d.users || []; renderUsers(); };
+  function renderUsers() {
+    var f = ($("users-filter").value || "").toLowerCase();
+    var list = state.users.filter(function (u) { return !f || ((u.name || "") + " " + u.email).toLowerCase().indexOf(f) >= 0; });
+    $("users-body").innerHTML = list.length ? list.map(function (u) {
+      var tel = [];
+      if (u.can_use_payment) tel.push('<span class="chip ok">סליקה</span>');
+      if (u.can_use_terminal) tel.push('<span class="chip ok">מסופים</span>');
+      if (u.can_view_history) tel.push('<span class="chip ok">היסטוריה</span>');
+      return "<tr><td><b>" + esc(u.name || "—") + (u.is_admin ? ' <span class="chip blue">מנהל</span>' : "") + '</b><br><small style="color:var(--muted)">' + esc(u.email) + "</small></td>" +
+        "<td>" + esc(u.max_tokens) + "</td><td>" + (tel.join("") || '<span class="chip">ללא</span>') + "</td><td>" + (u.is_admin ? '<span class="chip blue">גישה מלאה</span>' : scopeChips(u.api_scopes)) +
+        '</td><td><button class="btn btn-ghost btn-sm" data-edit-user="' + u.id + '"><i class="fa-solid fa-sliders"></i> הרשאות</button></td></tr>';
+    }).join("") : emptyRow(5, "אין לקוחות");
+  }
+  $("users-filter").oninput = renderUsers;
+  $("users-body").onclick = function (e) {
+    var b = e.target.closest("[data-edit-user]"); if (!b) return;
+    var u = state.users.find(function (x) { return String(x.id) === b.getAttribute("data-edit-user"); });
+    $("eu-id").value = u.id; $("eu-name").value = u.name || ""; $("eu-max").value = u.max_tokens;
+    $("eu-payment").checked = !!u.can_use_payment; $("eu-terminal").checked = !!u.can_use_terminal; $("eu-history").checked = !!u.can_view_history;
+    renderScopePicker("eu-scopes", u.api_scopes || [], null);
+    openModal("modal-user");
+  };
+  $("edit-user-form").onsubmit = async function (e) {
+    e.preventDefault();
+    var scopes = pickedScopes("eu-scopes");
+    if (scopes.length === state.config.scopes.length) scopes = ["*"];
+    try {
+      await api("/users/" + $("eu-id").value, { method: "PATCH", body: {
+        name: $("eu-name").value, max_tokens: parseInt($("eu-max").value, 10) || 1,
+        can_use_payment: $("eu-payment").checked, can_use_terminal: $("eu-terminal").checked, can_view_history: $("eu-history").checked, api_scopes: scopes } });
+      closeModals(); toast("ההרשאות נשמרו"); LOADERS.users();
+    } catch (err) { toast(err.message, true); }
+  };
+  $("new-user").onsubmit = async function (e) {
+    e.preventDefault();
+    try {
+      await api("/users", { method: "POST", body: { name: $("nu-name").value, email: $("nu-email").value.trim(), password: $("nu-pass").value, max_tokens: parseInt($("nu-max").value, 10) || 1 } });
+      e.target.reset(); $("nu-max").value = 1; toast("הלקוח נוסף – הגדירו לו הרשאות"); LOADERS.users();
+    } catch (err) { toast(err.message, true); }
+  };
+
+  // ---------- admin: tokens ----------
+  LOADERS["all-tokens"] = async function () {
+    var d = await api("/admin/tokens"); var list = d.tokens || [];
+    $("all-tokens-body").innerHTML = list.length ? list.map(function (t) {
+      return "<tr><td>" + esc(t.owner_name || "") + '<br><small style="color:var(--muted)">' + esc(t.owner_email) + "</small></td><td>" + esc(t.label) + "</td><td class='mono'>" + esc(t.target_club_id) + "</td><td>" + esc(t.target_username) +
+        '</td><td><div class="secret"><code>' + esc(t.token) + '</code><button class="icon-btn" data-copy="' + esc(t.token) + '"><i class="fa-regular fa-copy"></i></button></div></td>' +
+        '<td><button class="btn btn-ghost btn-sm" data-transfer="' + t.id + '"><i class="fa-solid fa-right-left"></i> העבר</button></td></tr>';
+    }).join("") : emptyRow(6, "אין מערכות");
+  };
+  $("all-tokens-body").onclick = async function (e) {
+    var b = e.target.closest("[data-transfer]"); if (!b) return;
+    $("tr-id").value = b.getAttribute("data-transfer");
+    $("tr-user").innerHTML = '<option value="">טוען...</option>'; openModal("modal-transfer");
+    var d = await api("/users");
+    $("tr-user").innerHTML = '<option value="">בחר לקוח...</option>' + (d.users || []).map(function (u) { return '<option value="' + u.id + '">' + esc(u.name || u.email) + " (" + esc(u.email) + ")</option>"; }).join("");
+  };
+  $("transfer-form").onsubmit = async function (e) {
+    e.preventDefault();
+    try { await api("/admin/tokens/" + $("tr-id").value + "/transfer", { method: "POST", body: { new_user_id: parseInt($("tr-user").value, 10) } }); closeModals(); toast("הועבר"); LOADERS["all-tokens"](); }
+    catch (err) { toast(err.message, true); }
+  };
+
+  // ---------- admin: keys ----------
+  LOADERS["all-keys"] = async function () {
+    var d = await api("/admin/api-keys"); var list = d.api_keys || [];
+    $("all-keys-body").innerHTML = list.length ? list.map(function (k) {
+      return "<tr><td>" + esc(k.owner_name || "") + '<br><small style="color:var(--muted)">' + esc(k.owner_email) + "</small></td><td>" + esc(k.name) + "</td><td><code>" + esc(k.key_prefix) + "…</code></td><td>" + esc(k.system_label || "—") +
+        "</td><td>" + scopeChips(k.scopes) + "</td><td>" + fmtDate(k.last_used_at) + '</td><td><button class="btn btn-danger btn-sm" data-admin-revoke="' + k.id + '"><i class="fa-solid fa-ban"></i></button></td></tr>';
+    }).join("") : emptyRow(7, "אין מפתחות פעילים");
+  };
+  $("all-keys-body").onclick = async function (e) {
+    var b = e.target.closest("[data-admin-revoke]"); if (!b) return;
+    if (!confirm("לבטל את המפתח?")) return;
+    try { await api("/admin/api-keys/" + b.getAttribute("data-admin-revoke"), { method: "DELETE" }); toast("בוטל"); LOADERS["all-keys"](); } catch (err) { toast(err.message, true); }
+  };
+
+  // ---------- boot ----------
+  (async function boot() {
+    try { await loadConfig(); } catch (e) { showLoginMsg("לא ניתן להתחבר לשרת", "warn"); return; }
+    initGoogle();
+    if (state.session) {
+      try { var d = await api("/me"); state.user = d.user; renderApp(); } catch (e) { logout(true); }
+    }
+  })();
+})();
+</script>
+</body>
+</html>

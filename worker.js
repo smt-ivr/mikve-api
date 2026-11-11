@@ -5,7 +5,10 @@ import { getActiveClient } from './clients.js';
 import { processIvrFlow } from './payment.js';
 import { processManagementFlow } from './management.js';
 import { processTerminalFlow } from './terminals.js';
-import { dashboardHTML } from './dashboard-html.js'; 
+import { dashboardHTML } from './dashboard-html.js';
+import { handlePublicApi } from './public-api.js';
+import { ensureSchema } from './schema.js';
+import apiDocs from './API.md';
 
 export default {
   async fetch(request, env, ctx) {
@@ -18,16 +21,30 @@ export default {
       });
     }
 
+    // תיעוד API להורדה (Markdown - מתאים להעברה ל-AI)
+    if (path === '/mikve/docs/api.md' || path === '/mikve/api/docs') {
+      const docs = apiDocs.replaceAll('{{BASE_URL}}', `${url.origin}/mikve/api/v1`);
+      const headers = { "Content-Type": "text/markdown; charset=utf-8", "Access-Control-Allow-Origin": "*" };
+      if (url.searchParams.has('download')) headers["Content-Disposition"] = 'attachment; filename="mikve-api-docs.md"';
+      return new Response(docs, { headers });
+    }
+
     if (path.startsWith('/mikve/api')) {
       const corsHeaders = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization"
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-API-Key"
       };
       
       if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
       
-      const response = await handleSaasRequest(request, env);
+      let response;
+      if (path === '/mikve/api/v1' || path.startsWith('/mikve/api/v1/')) {
+        await ensureSchema(env);
+        response = await handlePublicApi(request, env, path.substring('/mikve/api/v1'.length));
+      } else {
+        response = await handleSaasRequest(request, env);
+      }
       const responseHeaders = new Headers(response.headers);
       for (const [key, value] of Object.entries(corsHeaders)) responseHeaders.set(key, value);
       
