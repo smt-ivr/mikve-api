@@ -3,6 +3,7 @@
 export const SCOPES = [
   { id: 'history:purchases', group: 'היסטוריה', label: 'היסטוריית רכישות: מי רכש, מה, מתי וכמה' },
   { id: 'history:terminals', group: 'היסטוריה', label: 'היסטוריית מסופים: מי פתח, איזה מסוף ומתי' },
+  { id: 'history:account',   group: 'היסטוריה', label: 'היסטוריית שינויים בחשבון: מי הוסיף/מחק אשראי, מי הפעיל/ביטל חידוש אוטומטי' },
   { id: 'club:read',         group: 'מערכת',   label: 'צפייה בפרטי המערכת והקבוצות' },
   { id: 'clients:read',      group: 'לקוחות',  label: 'צפייה ברשימת לקוחות ופרטי לקוח' },
   { id: 'clients:write',     group: 'לקוחות',  label: 'עדכון פרטי לקוח' },

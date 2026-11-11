@@ -17,6 +17,19 @@ export const TERMINAL_ACTIONS = {
   checkUpdates: 'בדיקת עדכונים',
 };
 
+export const ACCOUNT_EVENTS = {
+  card_added: 'הוספת כרטיס אשראי',
+  card_deleted: 'מחיקת כרטיס אשראי',
+  auto_renew_subscription_on: 'הפעלת חידוש מנוי אוטומטי',
+  auto_renew_subscription_off: 'ביטול חידוש מנוי אוטומטי',
+  auto_renew_license_on: 'הפעלת חידוש רישיון אוטומטי',
+  auto_renew_license_off: 'ביטול חידוש רישיון אוטומטי',
+  auto_credit_on: 'הפעלת טעינת פעימות אוטומטית',
+  auto_credit_off: 'ביטול טעינת פעימות אוטומטית',
+  auto_credit_amount: 'שינוי סכום טעינת פעימות אוטומטית',
+  client_updated: 'עדכון פרטי לקוח',
+};
+
 const digits = v => String(v ?? '').replace(/\D/g, '');
 const toIso = v => {
   if (!v) return null;
@@ -70,6 +83,37 @@ export async function logTerminalAction(env, t) {
   }
 }
 
+// רישום שינוי בחשבון לקוח. לא מכשיל את הפעולה עצמה אם הרישום נכשל
+export async function logAccountChange(env, a) {
+  try {
+    const c = a.client || {};
+    await env.DB.prepare(`INSERT INTO account_logs
+      (club_id, client_id, client_name, personal_id, client_phone, event, details, card_last4, status, message, source, caller_phone, api_key_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(a.clubId, c.id != null ? String(c.id) : null, `${c.firstName || ''} ${c.lastName || ''}`.trim() || null,
+        c.personalId || null, c.phone || null, a.event, a.details ? JSON.stringify(a.details) : null, a.cardLast4 || null,
+        a.success ? 'SUCCESS' : 'FAILED', a.message || null, a.source || 'phone', a.callerPhone || null, a.apiKeyName || null)
+      .run();
+  } catch (e) { /* ignore */ }
+}
+
+// משווה לקוח לפני/אחרי ומחזיר אירועי חידוש אוטומטי + עדכון כללי
+export function diffClientEvents(before, after) {
+  const events = [];
+  const b = before || {}, a = after || {};
+  if (!!b.autoRenewSubscription !== !!a.autoRenewSubscription) events.push({ event: a.autoRenewSubscription ? 'auto_renew_subscription_on' : 'auto_renew_subscription_off' });
+  if (!!b.autoRenewLicence !== !!a.autoRenewLicence) events.push({ event: a.autoRenewLicence ? 'auto_renew_license_on' : 'auto_renew_license_off' });
+  if (!!b.autoRenewCredit !== !!a.autoRenewCredit) {
+    events.push({ event: a.autoRenewCredit ? 'auto_credit_on' : 'auto_credit_off', details: { amount_agorot: a.autoRenewCredit ? (a.autoRenewCreditAmount ?? null) : null, previous_amount_agorot: b.autoRenewCreditAmount ?? null } });
+  } else if (a.autoRenewCredit && (b.autoRenewCreditAmount ?? null) !== (a.autoRenewCreditAmount ?? null)) {
+    events.push({ event: 'auto_credit_amount', details: { amount_agorot: a.autoRenewCreditAmount ?? null, previous_amount_agorot: b.autoRenewCreditAmount ?? null } });
+  }
+  const tracked = new Set(['autoRenewSubscription', 'autoRenewLicence', 'autoRenewCredit', 'autoRenewCreditAmount']);
+  const fields = Object.keys(a).filter(k => !tracked.has(k) && JSON.stringify(a[k]) !== JSON.stringify(b[k]));
+  if (fields.length) events.push({ event: 'client_updated', details: { fields } });
+  return events;
+}
+
 // ---------------------------------------------------------------
 // עיצוב רשומות
 // ---------------------------------------------------------------
@@ -118,6 +162,31 @@ export function formatTerminalLog(row) {
     success: row.status === 'SUCCESS',
     source: sourceOf(row),
     client: null, // מתמלא בזיהוי לפי טלפון המתקשר (resolveTerminalClients)
+  };
+}
+
+export function formatAccountLog(row) {
+  let details = {};
+  try { details = row.details ? JSON.parse(row.details) : {}; } catch (e) {}
+  const ev = String(row.event || '');
+  const enabled = ev.endsWith('_on') ? true : ev.endsWith('_off') ? false : null;
+  return {
+    id: row.id,
+    date: toIso(row.logged_at),
+    system: { label: row.system_label || null, club_id: row.club_id },
+    client: { id: row.client_id, name: row.client_name, personal_id: row.personal_id, phone: row.client_phone },
+    event: { code: ev, name: ACCOUNT_EVENTS[ev] || ev, enabled },
+    details: {
+      card_last4: row.card_last4 || null,
+      card_exp: details.card_exp || null,
+      amount_agorot: details.amount_agorot ?? null,
+      previous_amount_agorot: details.previous_amount_agorot ?? null,
+      fields: details.fields || null,
+    },
+    status: row.status,
+    success: row.status === 'SUCCESS',
+    message: row.message || null,
+    source: { channel: row.source || 'phone', caller_phone: row.source === 'api' ? null : (row.caller_phone || null), api_key: row.api_key_name || null },
   };
 }
 
@@ -199,6 +268,31 @@ export async function queryTerminalLogs(env, scope, f = {}) {
       FROM terminal_logs l ${w} ORDER BY l.timestamp DESC, l.rowid DESC LIMIT ? OFFSET ?`).bind(...binds, limit, offset).all();
 
   return { total, limit, offset, logs: results.map(formatTerminalLog) };
+}
+
+export async function queryAccountLogs(env, scope, f = {}) {
+  const where = [], binds = [];
+  scopeWhere('a', scope, where, binds);
+  const from = toDbDate(f.from, false), to = toDbDate(f.to, true);
+  if (from) { where.push('a.logged_at >= ?'); binds.push(from); }
+  if (to) { where.push('a.logged_at <= ?'); binds.push(to); }
+  if (f.client_id) { where.push('a.client_id = ?'); binds.push(String(f.client_id)); }
+  if (f.personal_id) { where.push("ltrim(a.personal_id, '0') = ltrim(?, '0')"); binds.push(digits(f.personal_id)); }
+  if (f.phone) { where.push("(ltrim(a.client_phone, '0') = ltrim(?, '0') OR ltrim(a.caller_phone, '0') = ltrim(?, '0'))"); binds.push(digits(f.phone), digits(f.phone)); }
+  if (f.status) { where.push('a.status = ?'); binds.push(String(f.status).toUpperCase()); }
+  if (f.source === 'api' || f.source === 'phone') { where.push('a.source = ?'); binds.push(f.source); }
+  // event: קוד מדויק או קידומת (card / auto_renew / auto_credit)
+  if (f.event) { where.push("(a.event = ? OR a.event LIKE ?)"); binds.push(f.event, `${f.event}%`); }
+  if (f.search) {
+    where.push('(a.client_name LIKE ? OR a.personal_id LIKE ? OR a.client_phone LIKE ? OR a.caller_phone LIKE ? OR a.client_id = ?)');
+    const s = `%${f.search}%`; binds.push(s, s, s, s, String(f.search));
+  }
+  const w = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  const limit = clamp(f.limit, 100, 1000), offset = Math.max(parseInt(f.offset, 10) || 0, 0);
+  const total = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM account_logs a ${w}`).bind(...binds).first()).n;
+  const { results } = await env.DB.prepare(`SELECT a.*, ${SYSTEM_LABEL('a')} AS system_label
+      FROM account_logs a ${w} ORDER BY a.logged_at DESC, a.id DESC LIMIT ? OFFSET ?`).bind(...binds, limit, offset).all();
+  return { total, limit, offset, changes: results.map(formatAccountLog) };
 }
 
 // ---------------------------------------------------------------

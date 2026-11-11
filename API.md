@@ -38,6 +38,7 @@ X-API-Key: mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 |---|---|
 | `history:purchases` | **היסטוריית רכישות בלבד** – מי רכש, מה, מתי, כמה ובאיזה ערוץ |
 | `history:terminals` | **היסטוריית מסופים בלבד** – מי פתח איזה מסוף ומתי |
+| `history:account` | **היסטוריית שינויים בחשבון לקוח** – מי הוסיף/מחק כרטיס אשראי, מי הפעיל/ביטל חידוש אוטומטי |
 | `club:read` | צפייה בפרטי המערכת והקבוצות |
 | `clients:read` | צפייה ברשימת לקוחות ופרטי לקוח |
 | `clients:write` | עדכון פרטי לקוח |
@@ -48,7 +49,7 @@ X-API-Key: mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 | `terminals:control` | שליחת פקודות למסוף (פתיחת דלת, ריענון, הפעלה מחדש) |
 | `*` | גישה מלאה – כל ההרשאות |
 
-> מפתח עם `history:purchases` ו/או `history:terminals` בלבד יכול **רק לקרוא היסטוריה** – אין לו גישה לרשימת הלקוחות, לחיובים או לשליטה במסופים.
+> מפתח עם הרשאות `history:*` בלבד יכול **רק לקרוא היסטוריה** – אין לו גישה לרשימת הלקוחות, לחיובים או לשליטה במסופים.
 
 ההרשאות בפועל של מפתח הן החיתוך בין מה שנבחר ביצירתו לבין מה שמנהל המערכת מאשר כרגע לחשבון.
 ניתן לבדוק את ההרשאות בפועל בכל עת עם `GET /me`.
@@ -180,17 +181,76 @@ X-API-Key: mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 `client` מזוהה לפי מספר הטלפון שממנו התקשרו מול רשימת הלקוחות במערכת. אם לא נמצאה התאמה (או שהפעולה בוצעה דרך API) – `client` יהיה `null`.
 
+### GET /history/account
+`history:account` – **מי הוסיף כרטיס אשראי, מי מחק, ומי הפעיל או ביטל חידוש אוטומטי** (בטלפון בתפריט "ניהול אמצעי תשלום והוראות קבע", או דרך ה-API).
+
+סינונים נוספים: `client_id`, `personal_id`, `event` – קוד אירוע מדויק או קידומת:
+
+| `event` | משמעות |
+|---|---|
+| `card_added` | הוספת כרטיס אשראי |
+| `card_deleted` | מחיקת כרטיס אשראי |
+| `auto_renew_subscription_on` / `_off` | הפעלה / ביטול חידוש מנוי אוטומטי |
+| `auto_renew_license_on` / `_off` | הפעלה / ביטול חידוש רישיון אוטומטי |
+| `auto_credit_on` / `_off` | הפעלה / ביטול טעינת פעימות אוטומטית |
+| `auto_credit_amount` | שינוי סכום טעינת פעימות אוטומטית |
+| `client_updated` | עדכון פרטי לקוח אחרים (דרך API) |
+| קידומות שימושיות | `card` (כל פעולות הכרטיס), `auto_renew` (מנוי + רישיון), `auto_credit` |
+
+```json
+{
+  "success": true,
+  "total": 2, "limit": 100, "offset": 0,
+  "changes": [
+    {
+      "id": 12,
+      "date": "2026-11-11T19:15:02Z",
+      "system": { "label": "מקווה מרכז", "club_id": "abc123" },
+      "client": { "id": "555", "name": "ישראל ישראלי", "personal_id": "012345678", "phone": "0501234567" },
+      "event": { "code": "card_added", "name": "הוספת כרטיס אשראי", "enabled": null },
+      "details": { "card_last4": "1234", "card_exp": "1228", "amount_agorot": null, "previous_amount_agorot": null, "fields": null },
+      "status": "SUCCESS", "success": true, "message": null,
+      "source": { "channel": "phone", "caller_phone": "0501234567", "api_key": null }
+    },
+    {
+      "id": 13,
+      "date": "2026-11-11T19:16:40Z",
+      "system": { "label": "מקווה מרכז", "club_id": "abc123" },
+      "client": { "id": "555", "name": "ישראל ישראלי", "personal_id": "012345678", "phone": "0501234567" },
+      "event": { "code": "auto_credit_on", "name": "הפעלת טעינת פעימות אוטומטית", "enabled": true },
+      "details": { "card_last4": null, "card_exp": null, "amount_agorot": 10000, "previous_amount_agorot": null, "fields": null },
+      "status": "SUCCESS", "success": true, "message": null,
+      "source": { "channel": "phone", "caller_phone": "0501234567", "api_key": null }
+    }
+  ]
+}
+```
+
+| שדה | תיאור |
+|---|---|
+| `event.enabled` | `true` = הופעל, `false` = בוטל, `null` = לא רלוונטי (כרטיס / עדכון) |
+| `details.card_last4` / `card_exp` | 4 ספרות אחרונות ותוקף (`MMYY`) של הכרטיס שנוסף / נמחק. מספר מלא ו-CVV לעולם לא נשמרים |
+| `details.amount_agorot` | סכום טעינת הפעימות האוטומטית החדש |
+| `details.previous_amount_agorot` | הסכום הקודם (בשינוי / ביטול) |
+| `details.fields` | השדות שעודכנו ב-`client_updated` |
+| `message` | סיבת הכישלון אם הפעולה נכשלה |
+| `source` | כמו בשאר ההיסטוריה: `phone` + טלפון המתקשר, או `api` + שם המפתח |
+
+> היומן הזה קיים מעכשיו והלאה – פעולות שבוצעו לפני העדכון לא מופיעות בו.
+
 ### GET /history
-דורש לפחות אחת מההרשאות `history:purchases` / `history:terminals`. מחזיר את כל סוגי הפעולות שמותרים למפתח בציר זמן אחד, מהחדש לישן. מקבל את אותם פרמטרי סינון (ללא `offset`).
+דורש לפחות אחת מההרשאות `history:purchases` / `history:terminals` / `history:account`. מחזיר את כל סוגי הפעולות שמותרים למפתח בציר זמן אחד, מהחדש לישן. מקבל את אותם פרמטרי סינון (ללא `offset`).
 
 ```json
 {
   "success": true,
   "purchases_total": 120,
   "terminal_actions_total": 340,
+  "account_changes_total": 25,
   "events": [
     { "kind": "terminal_action", "date": "2026-11-11T18:02:44Z", "...": "כמו ב-/history/terminals" },
-    { "kind": "purchase", "date": "2026-11-11T09:30:12Z", "...": "כמו ב-/history/purchases" }
+    { "kind": "purchase", "date": "2026-11-11T09:30:12Z", "...": "כמו ב-/history/purchases" },
+    { "kind": "account_change", "date": "2026-11-11T08:10:00Z", "...": "כמו ב-/history/account" }
   ]
 }
 ```
@@ -391,6 +451,12 @@ const { client } = await mikve(`/clients/${clients[0].id}`);
 
 ```bash
 curl -H "Authorization: Bearer $MIKVE_API_KEY" "{{BASE_URL}}/history/purchases?from=2026-11-01&to=2026-11-30&status=SUCCESS"
+```
+
+### מי הוסיף כרטיס אשראי השבוע
+
+```bash
+curl -H "Authorization: Bearer $MIKVE_API_KEY" "{{BASE_URL}}/history/account?event=card_added&from=2026-11-08"
 ```
 
 ### Python

@@ -1,7 +1,7 @@
 // public-api.js - API ציבורי ללקוחות, מאובטח במפתח API עם הרשאות (scopes)
 import { getValidToken } from './auth.js';
 import { effectiveKeyScopes } from './scopes.js';
-import { logPurchase, logTerminalAction, queryPurchases, queryTerminalLogs, resolveTerminalClients } from './history.js';
+import { logPurchase, logTerminalAction, logAccountChange, diffClientEvents, queryPurchases, queryTerminalLogs, queryAccountLogs, resolveTerminalClients } from './history.js';
 
 const BASE_URL = "https://prod.xn--8dbba8a7b.com";
 
@@ -59,7 +59,7 @@ export async function handlePublicApi(request, env, subPath) {
 
   const need = (...anyOf) => anyOf.some(s => scopes.includes(s)) ? null :
     err(403, 'insufficient_scope', `למפתח זה אין הרשאה: ${anyOf.join(' או ')}`);
-  const filters = () => Object.fromEntries(['from', 'to', 'client_id', 'personal_id', 'phone', 'status', 'type', 'source', 'search', 'terminal_id', 'action', 'limit', 'offset'].map(k => [k, q.get(k)]));
+  const filters = () => Object.fromEntries(['from', 'to', 'client_id', 'personal_id', 'phone', 'status', 'type', 'source', 'search', 'terminal_id', 'action', 'event', 'limit', 'offset'].map(k => [k, q.get(k)]));
 
   const method = request.method;
   const parts = subPath.split('/').filter(Boolean); // e.g. ['clients','123']
@@ -106,10 +106,15 @@ export async function handlePublicApi(request, env, subPath) {
         if (resolve) await resolveTerminalClients(env, r.logs);
         return json({ success: true, ...r });
       }
+      if ((parts[1] === 'account' || parts[1] === 'account-changes') && parts.length === 2) {
+        const d = need('history:account'); if (d) return d;
+        return json({ success: true, ...(await queryAccountLogs(env, { clubId }, filters())) });
+      }
       if (parts.length === 1) {
         const canP = scopes.includes('history:purchases') || scopes.includes('purchases:read');
         const canT = scopes.includes('history:terminals') || scopes.includes('terminals:read');
-        if (!canP && !canT) return need('history:purchases', 'history:terminals');
+        const canA = scopes.includes('history:account');
+        if (!canP && !canT && !canA) return need('history:purchases', 'history:terminals', 'history:account');
         const f = filters();
         const out = { success: true, events: [] };
         if (canP) {
@@ -122,6 +127,11 @@ export async function handlePublicApi(request, env, subPath) {
           if (resolve) await resolveTerminalClients(env, t.logs);
           out.terminal_actions_total = t.total;
           out.events.push(...t.logs.map(x => ({ kind: 'terminal_action', ...x })));
+        }
+        if (canA) {
+          const a = await queryAccountLogs(env, { clubId }, f);
+          out.account_changes_total = a.total;
+          out.events.push(...a.changes.map(x => ({ kind: 'account_change', ...x })));
         }
         out.events.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
         out.events = out.events.slice(0, Math.min(parseInt(f.limit, 10) || 100, 1000));
@@ -175,6 +185,10 @@ export async function handlePublicApi(request, env, subPath) {
         if (!cur.ok) return cur.status === 404 ? err(404, 'not_found', 'לקוח לא נמצא') : upstreamFail(cur);
         const merged = { ...cur.data, ...changes };
         const r = await upstream(`/Client/${encodeURIComponent(clientId)}`, { method: 'PATCH', body: merged });
+        for (const e of diffClientEvents(cur.data, merged)) {
+          await logAccountChange(env, { clubId, client: cur.data, event: e.event, details: e.details, success: r.ok,
+            message: r.ok ? null : `HTTP ${r.status}`, source: 'api', apiKeyName: row.key_name || String(row.key_id) });
+        }
         return r.ok ? json({ success: true, client: (r.data && typeof r.data === 'object') ? r.data : merged }) : upstreamFail(r);
       }
 
