@@ -6,3 +6,13 @@ compatibility_date = "2024-05-26"
 binding = "DB"
 database_name = "mikve-db"
 database_id = "17bd9072-ea3d-481a-80a0-2f0e5b01b8ee"
+
+# ייבוא קובץ התיעוד כטקסט
+[[rules]]
+type = "Text"
+globs = ["**/*.md", "**/*.html"]
+fallthrough = true
+
+# אופציונלי: Client ID של גוגל (ברירת המחדל זהה לאתר סלומון)
+# [vars]
+# GOOGLE_CLIENT_ID = "xxxx.apps.googleusercontent.com"
