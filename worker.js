@@ -73,6 +73,8 @@ export default {
         }
       }
 
+      try { await ensureSchema(env); } catch (e) {}
+
       const userToken = params.token;
       
       if (!userToken) {

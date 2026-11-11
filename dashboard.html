@@ -41,7 +41,7 @@ code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;dire
 /* Forms */
 .field{display:flex;flex-direction:column;gap:6px;text-align:right;margin-bottom:14px}
 .field label{font-size:13px;font-weight:600;color:var(--muted)}
-input[type=text],input[type=email],input[type=password],input[type=number],select{
+input[type=text],input[type=email],input[type=password],input[type=number],input[type=date],select{
   width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);font:inherit;outline:none;transition:border .15s,box-shadow .15s}
 input:focus,select:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 16px;border-radius:10px;border:1px solid transparent;font:inherit;font-weight:600;cursor:pointer;transition:.15s;white-space:nowrap}
@@ -120,6 +120,13 @@ tr:last-child td{border-bottom:none}
 .scope-item.disabled{opacity:.45;cursor:not-allowed}
 .preset-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 
+.tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.tab{padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font:inherit;font-weight:600;cursor:pointer}
+.tab.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.pager{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:14px;color:var(--muted);font-size:14px}
+.cell-sub{display:block;color:var(--muted);font-size:12px}
+.nowrap{white-space:nowrap}
+
 /* Modal */
 .modal{position:fixed;inset:0;background:rgba(2,6,23,.55);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
 .modal-box{background:var(--surface);border-radius:16px;width:100%;max-width:560px;max-height:92vh;overflow:auto;padding:24px;border:1px solid var(--border)}
@@ -178,7 +185,7 @@ pre{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:14px;overflow:au
       <li class="section">כללי</li>
       <li><button data-view="systems" class="active"><i class="fa-solid fa-server"></i> המערכות שלי</button></li>
       <li><button data-view="keys"><i class="fa-solid fa-key"></i> מפתחות API</button></li>
-      <li class="need-history"><button data-view="history"><i class="fa-solid fa-clock-rotate-left"></i> היסטוריית מסופים</button></li>
+      <li class="need-history"><button data-view="history"><i class="fa-solid fa-clock-rotate-left"></i> היסטוריית פעולות</button></li>
       <li><button data-view="docs"><i class="fa-solid fa-book"></i> תיעוד API</button></li>
       <li class="section need-admin">ניהול</li>
       <li class="need-admin"><button data-view="users"><i class="fa-solid fa-users"></i> לקוחות והרשאות</button></li>
@@ -241,6 +248,8 @@ pre{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:14px;overflow:au
           </div>
           <div class="field" style="margin-bottom:8px"><label>הרשאות</label></div>
           <div class="preset-row">
+            <button type="button" class="btn btn-ghost btn-sm" data-preset="history">היסטוריה בלבד</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-preset="hpurchases">היסטוריית רכישות בלבד</button>
             <button type="button" class="btn btn-ghost btn-sm" data-preset="read">קריאה בלבד</button>
             <button type="button" class="btn btn-ghost btn-sm" data-preset="purchases">רכישות בלבד</button>
             <button type="button" class="btn btn-ghost btn-sm" data-preset="terminals">מסופים בלבד</button>
@@ -262,12 +271,30 @@ pre{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:14px;overflow:au
 
     <!-- History -->
     <section data-section="history" class="hidden">
+      <div class="tabs">
+        <button class="tab active" data-htab="purchases"><i class="fa-solid fa-cart-shopping"></i> רכישות</button>
+        <button class="tab" data-htab="terminals"><i class="fa-solid fa-door-open"></i> פתיחות ופעולות מסופים</button>
+      </div>
       <div class="card">
-        <div class="card-head"><h3>יומן פעולות מסופים</h3><button class="btn btn-ghost btn-sm" id="refresh-history"><i class="fa-solid fa-rotate"></i> רענון</button></div>
+        <form id="history-filters" class="grid-form">
+          <div class="field"><label>מתאריך</label><input type="date" id="hf-from"></div>
+          <div class="field"><label>עד תאריך</label><input type="date" id="hf-to"></div>
+          <div class="field"><label>מערכת</label><select id="hf-system"><option value="">כל המערכות</option></select></div>
+          <div class="field"><label>חיפוש (שם / ת״ז / טלפון / מזהה)</label><input type="text" id="hf-search"></div>
+          <div class="field hf-p"><label>סוג רכישה</label><select id="hf-type"><option value="">הכל</option><option value="credit">טעינת פעימות</option><option value="subscription">חידוש מנוי</option><option value="license">חידוש רישיון</option></select></div>
+          <div class="field hf-t hidden"><label>פעולה</label><select id="hf-action"><option value="">הכל</option><option value="openGate">פתיחת דלת</option><option value="reload">ריענון</option><option value="reboot">הפעלה מחדש</option><option value="checkUpdates">בדיקת עדכונים</option></select></div>
+          <div class="field"><label>סטטוס</label><select id="hf-status"><option value="">הכל</option><option value="SUCCESS">הצלחה</option><option value="FAILED">נכשל</option></select></div>
+          <div class="field"><label>מקור</label><select id="hf-source"><option value="">הכל</option><option value="phone">טלפון</option><option value="api">API</option></select></div>
+          <div class="actions"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-magnifying-glass"></i> סינון</button><button class="btn btn-ghost" type="button" id="hf-export" title="ייצוא CSV"><i class="fa-solid fa-file-csv"></i></button></div>
+        </form>
+      </div>
+      <div class="stats" id="history-stats"></div>
+      <div class="card">
         <div class="table-wrap"><table>
-          <thead><tr><th>תאריך ושעה</th><th>מערכת</th><th>מסוף</th><th>פעולה</th><th>מקור</th><th>סטטוס</th></tr></thead>
+          <thead id="history-head"></thead>
           <tbody id="history-body"></tbody>
         </table></div>
+        <div class="pager"><button class="btn btn-ghost btn-sm" id="hp-prev"><i class="fa-solid fa-chevron-right"></i> הקודם</button><span id="hp-info"></span><button class="btn btn-ghost btn-sm" id="hp-next">הבא <i class="fa-solid fa-chevron-left"></i></button></div>
       </div>
     </section>
 
@@ -368,7 +395,9 @@ pre{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:14px;overflow:au
     </div>
     <div class="field" style="margin-bottom:8px"><label>הרשאות API שהלקוח רשאי להעניק למפתחות שלו</label></div>
     <div class="preset-row">
-      <button type="button" class="btn btn-ghost btn-sm" data-upreset="read">קריאה בלבד</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-upreset="history">היסטוריה בלבד</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-upreset="hpurchases">היסטוריית רכישות בלבד</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-upreset="read">קריאה בלבד</button>
       <button type="button" class="btn btn-ghost btn-sm" data-upreset="purchases">רכישות בלבד</button>
       <button type="button" class="btn btn-ghost btn-sm" data-upreset="terminals">מסופים בלבד</button>
       <button type="button" class="btn btn-ghost btn-sm" data-upreset="all">API מלא</button>
@@ -400,7 +429,9 @@ pre{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:14px;overflow:au
   try { state.session = localStorage.getItem("mikve_session"); } catch (e) {}
 
   var PRESETS = {
-    read: ["club:read", "clients:read", "purchases:read", "terminals:read"],
+    read: ["club:read", "clients:read", "purchases:read", "terminals:read", "history:purchases", "history:terminals"],
+    history: ["history:purchases", "history:terminals"],
+    hpurchases: ["history:purchases"],
     purchases: ["clients:read", "purchases:read", "purchases:write"],
     terminals: ["terminals:read", "terminals:control"],
     all: "ALL", none: []
@@ -488,7 +519,7 @@ pre{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:14px;overflow:au
   var TITLES = {
     systems: ["המערכות שלי", "חיבורי המערכות לימות המשיח"],
     keys: ["מפתחות API", "גישה תכנותית לנתונים לפי הרשאות"],
-    history: ["היסטוריית מסופים", "100 הפעולות האחרונות"],
+    history: ["היסטוריית פעולות", "מי רכש מה, ומי פתח איזה מסוף – בטלפון וב-API"],
     docs: ["תיעוד API", "כל מה שצריך כדי להתחבר"],
     users: ["לקוחות והרשאות", "אישור הרשאות טלפוניות וגישת API"],
     "all-tokens": ["כל המערכות", "ניהול מערכות של כל הלקוחות"],
@@ -628,19 +659,101 @@ pre{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:14px;overflow:au
   };
 
   // ---------- history ----------
+  var hist = { tab: "purchases", offset: 0, limit: 50, last: null };
+  function histFilters() {
+    var f = { from: $("hf-from").value, to: $("hf-to").value, club_id: $("hf-system").value, search: $("hf-search").value.trim(),
+      status: $("hf-status").value, source: $("hf-source").value, limit: hist.limit, offset: hist.offset };
+    if (hist.tab === "purchases") f.type = $("hf-type").value; else f.action = $("hf-action").value;
+    return Object.keys(f).filter(function (k) { return f[k] !== "" && f[k] != null; }).map(function (k) { return k + "=" + encodeURIComponent(f[k]); }).join("&");
+  }
+  function fmtShortDate(v) { if (!v) return ""; var d = new Date(v); return isNaN(d) ? esc(v) : d.toLocaleDateString("he-IL"); }
+  function money(agorot) { return "₪" + (Number(agorot || 0) / 100).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+  function sourceCell(src) {
+    if (src.channel === "api") return '<span class="chip blue">API</span><span class="cell-sub">' + esc(src.api_key || "") + "</span>";
+    return '<span class="chip"><i class="fa-solid fa-phone"></i> טלפון</span><span class="cell-sub mono">' + esc(src.caller_phone || "") + "</span>";
+  }
+  function clientCell(c) {
+    if (!c || (!c.id && !c.name)) return '<span style="color:var(--muted)">—</span>';
+    return "<b>" + esc(c.name || "—") + "</b>" +
+      '<span class="cell-sub">מזהה: <span class="mono">' + esc(c.id || "—") + "</span>" + (c.personal_id ? ' · ת״ז: <span class="mono">' + esc(c.personal_id) + "</span>" : "") + "</span>" +
+      (c.phone ? '<span class="cell-sub mono">' + esc(c.phone) + "</span>" : "") +
+      (c.matched_by ? '<span class="cell-sub">זוהה לפי טלפון המתקשר</span>' : "");
+  }
+  function statusCell(ok, msg) { return '<span class="chip ' + (ok ? "ok" : "bad") + '">' + (ok ? "הצלחה" : "נכשל") + "</span>" + (!ok && msg ? '<span class="cell-sub">' + esc(msg) + "</span>" : ""); }
+
   LOADERS.history = async function () {
-    var d = await api("/logs"); var logs = d.logs || [];
-    $("history-body").innerHTML = logs.length ? logs.map(function (l) {
-      var ok = l.status === "SUCCESS";
-      return "<tr><td>" + fmtDate(l.timestamp) + "</td><td>" + esc(l.label) + "</td><td>" + esc(l.terminal_id) + "</td><td>" + esc(l.action_name) + "</td><td>" + esc(l.api_phone || "—") +
-        '</td><td><span class="chip ' + (ok ? "ok" : "bad") + '">' + (ok ? "הצלחה" : "נכשל") + "</span></td></tr>";
-    }).join("") : emptyRow(6, "לא נמצאו רשומות");
+    if ($("hf-system").options.length <= 1) {
+      try {
+        var sys = state.user.is_admin ? (await api("/admin/tokens")).tokens : (await api("/tokens")).tokens;
+        var seen = {};
+        $("hf-system").innerHTML = '<option value="">כל המערכות</option>' + (sys || []).filter(function (t) { if (seen[t.target_club_id]) return false; seen[t.target_club_id] = 1; return true; })
+          .map(function (t) { return '<option value="' + esc(t.target_club_id) + '">' + esc(t.label) + "</option>"; }).join("");
+      } catch (e) {}
+    }
+    var isP = hist.tab === "purchases";
+    $("history-body").innerHTML = emptyRow(isP ? 8 : 7, "טוען...");
+    var d = await api((isP ? "/purchase-logs?" : "/logs?") + histFilters());
+    hist.last = d;
+    var rows = isP ? d.purchases : d.logs;
+    if (isP) {
+      $("history-head").innerHTML = "<tr><th>תאריך</th><th>מערכת</th><th>לקוח</th><th>מה נרכש</th><th>סכום</th><th>כרטיס</th><th>מקור</th><th>סטטוס</th></tr>";
+      $("history-body").innerHTML = rows.length ? rows.map(function (p) {
+        var period = p.item.start_date || p.item.end_date ? '<span class="cell-sub">' + fmtShortDate(p.item.start_date) + " – " + fmtShortDate(p.item.end_date) + "</span>" : "";
+        return '<tr><td class="nowrap">' + fmtDate(p.date) + "</td><td>" + esc(p.system.label || p.system.club_id) + "</td><td>" + clientCell(p.client) +
+          "</td><td>" + esc(p.item.name || "לא ידוע (רשומה ישנה)") + period + '</td><td class="nowrap"><b>' + money(p.amount.agorot) + "</b></td><td class='mono'>" +
+          (p.payment.card_last4 ? "•••• " + esc(p.payment.card_last4) : "—") + "</td><td>" + sourceCell(p.source) + "</td><td>" + statusCell(p.payment.success, p.payment.message) + "</td></tr>";
+      }).join("") : emptyRow(8, "לא נמצאו רכישות");
+      $("history-stats").innerHTML = '<div class="stat"><small>רכישות שנמצאו</small><div>' + d.total + '</div></div><div class="stat"><small>סה״כ חיובים שהצליחו</small><div>' + money(d.total_success_agorot) + "</div></div>";
+    } else {
+      $("history-head").innerHTML = "<tr><th>תאריך</th><th>מערכת</th><th>מסוף</th><th>פעולה</th><th>מי ביצע</th><th>מקור</th><th>סטטוס</th></tr>";
+      $("history-body").innerHTML = rows.length ? rows.map(function (l) {
+        return '<tr><td class="nowrap">' + fmtDate(l.date) + "</td><td>" + esc(l.system.label || l.system.club_id) + "</td><td><b>" + esc(l.terminal.name || "—") + '</b><span class="cell-sub">מזהה: <span class="mono">' + esc(l.terminal.id) + "</span></span></td><td>" +
+          esc(l.action.name) + "</td><td>" + clientCell(l.client) + "</td><td>" + sourceCell(l.source) + "</td><td>" + statusCell(l.success) + "</td></tr>";
+      }).join("") : emptyRow(7, "לא נמצאו פעולות");
+      $("history-stats").innerHTML = '<div class="stat"><small>פעולות שנמצאו</small><div>' + d.total + "</div></div>";
+    }
+    var to = Math.min(d.offset + rows.length, d.total);
+    $("hp-info").textContent = d.total ? (d.offset + 1) + "–" + to + " מתוך " + d.total : "";
+    $("hp-prev").disabled = d.offset <= 0; $("hp-next").disabled = to >= d.total;
   };
-  $("refresh-history").onclick = function () { LOADERS.history(); };
+  document.querySelectorAll("[data-htab]").forEach(function (b) {
+    b.onclick = function () {
+      hist.tab = b.getAttribute("data-htab"); hist.offset = 0;
+      document.querySelectorAll("[data-htab]").forEach(function (x) { x.classList.toggle("active", x === b); });
+      document.querySelectorAll(".hf-p").forEach(function (x) { x.classList.toggle("hidden", hist.tab !== "purchases"); });
+      document.querySelectorAll(".hf-t").forEach(function (x) { x.classList.toggle("hidden", hist.tab === "purchases"); });
+      LOADERS.history().catch(function (e) { toast(e.message, true); });
+    };
+  });
+  $("history-filters").onsubmit = function (e) { e.preventDefault(); hist.offset = 0; LOADERS.history().catch(function (er) { toast(er.message, true); }); };
+  $("hp-prev").onclick = function () { hist.offset = Math.max(0, hist.offset - hist.limit); LOADERS.history(); };
+  $("hp-next").onclick = function () { hist.offset += hist.limit; LOADERS.history(); };
+  $("hf-export").onclick = async function () {
+    try {
+      var isP = hist.tab === "purchases", saveOff = hist.offset, saveLim = hist.limit;
+      hist.offset = 0; hist.limit = 1000;
+      var d = await api((isP ? "/purchase-logs?" : "/logs?") + histFilters());
+      hist.offset = saveOff; hist.limit = saveLim;
+      var head, lines;
+      if (isP) {
+        head = ["תאריך", "מערכת", "מזהה לקוח", "שם לקוח", "ת.ז", "טלפון לקוח", "מה נרכש", "מתאריך", "עד תאריך", "סכום (₪)", "4 ספרות כרטיס", "מקור", "טלפון מתקשר", "מפתח API", "סטטוס", "הודעה"];
+        lines = d.purchases.map(function (p) { return [p.date, p.system.label, p.client.id, p.client.name, p.client.personal_id, p.client.phone, p.item.name, p.item.start_date, p.item.end_date, p.amount.shekels, p.payment.card_last4, p.source.channel, p.source.caller_phone, p.source.api_key, p.payment.status, p.payment.message]; });
+      } else {
+        head = ["תאריך", "מערכת", "מזהה מסוף", "שם מסוף", "פעולה", "מזהה לקוח", "שם לקוח", "ת.ז", "מקור", "טלפון מתקשר", "מפתח API", "סטטוס"];
+        lines = d.logs.map(function (l) { var c = l.client || {}; return [l.date, l.system.label, l.terminal.id, l.terminal.name, l.action.name, c.id, c.name, c.personal_id, l.source.channel, l.source.caller_phone, l.source.api_key, l.status]; });
+      }
+      var csv = "﻿" + [head].concat(lines).map(function (r) { return r.map(function (v) { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(","); }).join("\n");
+      var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      a.download = (isP ? "purchases" : "terminal-actions") + ".csv"; a.click();
+    } catch (e) { toast(e.message, true); }
+  };
 
   // ---------- docs ----------
   var ENDPOINTS = [
     ["GET", "/me", "—", "פרטי המפתח וההרשאות"],
+    ["GET", "/history", "history:*", "כל הפעולות (רכישות + מסופים) בציר זמן אחד"],
+    ["GET", "/history/purchases", "history:purchases", "מי רכש, מה, מתי, כמה – עם סינון"],
+    ["GET", "/history/terminals", "history:terminals", "מי פתח איזה מסוף ומתי – עם סינון"],
     ["GET", "/club", "club:read", "פרטי המערכת"],
     ["GET", "/groups", "club:read", "קבוצות לקוחות"],
     ["GET", "/clients", "clients:read", "רשימת לקוחות (phone / personal_id / search)"],
