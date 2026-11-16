@@ -83,9 +83,33 @@ export async function processIvrFlow(clientData, params, token, env) {
 
   if (!isMainMenuSelected) {
     const nextIdx = main_menus.length + 1;
-    const balanceInShekels = (clientData.lastBalance || 0) / 100; 
+    const balanceInShekels = (clientData.lastBalance || 0) / 100;
+
+    // --- סוג המנוי של הלקוח (שם הקבוצה) + האם זו קבוצת "ערך צבור" (פעימות בלבד, בלי מנוי חודשי) ---
+    let groupName = "";
+    let isErechTzavur = false;
+    try {
+      const grpRes = await fetch(`${BASE_URL}/Group`, {
+        method: 'GET',
+        headers: { "Authorization": `Bearer ${token}`, "clubExternalId": params.club }
+      });
+      if (grpRes.ok) {
+        const grpRaw = await grpRes.json();
+        const grpList = Array.isArray(grpRaw) ? grpRaw : (grpRaw.data || []);
+        const myGroup = grpList.find(g => g.id === clientData.groupId);
+        if (myGroup) {
+          groupName = (myGroup.name || "").replace(/^\s*\d+\s*[.\-)]\s*/, '').trim();
+          // ערך צבור = קבוצה שעובדת על פעימות ולא על מנוי חודשי
+          isErechTzavur = myGroup.useSubscription === false || /ערך\s*צבור|פעימ/.test(myGroup.name || "");
+        }
+      }
+    } catch (e) { /* אם לא הצלחנו לשלוף את הקבוצות - ממשיכים בלי לחסום */ }
+
+    // הקראת סוג המנוי של הלקוח
+    const typeParts = groupName ? [`t-סוג המנוי שלך הוא`, `t-${cleanText(groupName)}`] : [];
+
     let subEndParts = [`t-לא נמצא תוקף למנוי במערכת`];
-    
+
     const subDate = formatDateIL(clientData.subscriptionEndDate);
     if (subDate) subEndParts = subDate.year >= 2124 ? [`t-תוקף המנוי שלכם הוא ללא הגבלה`] : [`t-תוקף המנוי שלכם הוא עד`, `dateH-${subDate.formatted}`];
 
@@ -93,14 +117,20 @@ export async function processIvrFlow(clientData, params, token, env) {
     let licExpParts = [];
     if (licDate) licExpParts = licDate.year >= 2124 ? [`t-ותוקף הרישיון הוא ללא הגבלה`] : [`t-ותוקף הרישיון שלכם הוא עד`, `dateH-${licDate.formatted}`];
 
+    // תפריט: לקבוצת "ערך צבור" אין חידוש מנוי חודשי (אפשרות 2) - מסתירים וחוסמים אותה
+    const subMenuOption = isErechTzavur ? "" : "t-לחידוש מנוי חודשי הקישו 2.";
+    const allowedMainKeys = isErechTzavur ? "134*" : "1234*";
+    const menuLine = `t-לטעינת פעימות הקישו 1.${subMenuOption}t-לחידוש רישיון שנתי הקישו 3.t-לניהול אמצעי תשלום והוראות קבע הקישו 4`;
+
     let ttsParts = [
       `t-שלום`, `t-${cleanText(`${clientData.firstName}${clientData.lastName}`)}`,
+      ...typeParts,
       `t-יתרת הפעימות שלך היא`, `n-${balanceInShekels}`, `t-שקלים`,
       ...subEndParts, ...licExpParts,
-      `t-לטעינת פעימות הקישו 1.t-לחידוש מנוי חודשי הקישו 2.t-לחידוש רישיון שנתי הקישו 3.t-לניהול אמצעי תשלום והוראות קבע הקישו 4`
+      menuLine
     ];
 
-    return `read=${ttsParts.join(".")}=main_menu_${nextIdx},,1,,,NO,,,,1234*,,,,,no`;
+    return `read=${ttsParts.join(".")}=main_menu_${nextIdx},,1,,,NO,,,,${allowedMainKeys},,,,,no`;
   }
 
   const amountCancels = cc_numbers.filter(v => v === '*').length + fail_retries.filter(v => v === '2').length;
