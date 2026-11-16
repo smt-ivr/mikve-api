@@ -85,12 +85,8 @@ export async function processIvrFlow(clientData, params, token, env) {
     const nextIdx = main_menus.length + 1;
     const balanceInShekels = (clientData.lastBalance || 0) / 100;
 
-    // --- סוג המנוי של הלקוח (שם הקבוצה, להקראה בלבד) + האם לקבוצה מוגדר מנוי חודשי ---
-    // החסימה של חידוש מנוי חודשי נקבעת אך ורק לפי פרמטר מהשרת: useSubscription של הקבוצה.
-    // קבוצה שלא מוגדר לה מנוי חודשי (useSubscription=false) - למשל "ערך צבור"/פעימות - לא תקבל אפשרות 2.
-    // ברירת מחדל true: אם לא הצלחנו לקרוא את הקבוצה מהשרת, לא חוסמים (לא פוגעים בלקוח רגיל).
+    // --- סוג המנוי של הלקוח (שם הקבוצה) - להקראה בלבד ---
     let groupName = "";
-    let groupHasSubscription = true;
     try {
       const grpRes = await fetch(`${BASE_URL}/Group`, {
         method: 'GET',
@@ -100,12 +96,9 @@ export async function processIvrFlow(clientData, params, token, env) {
         const grpRaw = await grpRes.json();
         const grpList = Array.isArray(grpRaw) ? grpRaw : (grpRaw.data || []);
         const myGroup = grpList.find(g => g.id === clientData.groupId);
-        if (myGroup) {
-          groupName = (myGroup.name || "").replace(/^\s*\d+\s*[.\-)]\s*/, '').trim(); // רק להקראה
-          groupHasSubscription = myGroup.useSubscription === true; // פרמטר מהשרת בלבד
-        }
+        if (myGroup) groupName = (myGroup.name || "").replace(/^\s*\d+\s*[.\-)]\s*/, '').trim();
       }
-    } catch (e) { /* אם לא הצלחנו לשלוף את הקבוצות - ממשיכים בלי לחסום */ }
+    } catch (e) { /* אם לא הצלחנו לשלוף - ממשיכים בלי שם */ }
 
     // הקראת סוג המנוי של הלקוח
     const typeParts = groupName ? [`t-סוג המנוי שלך הוא`, `t-${cleanText(groupName)}`] : [];
@@ -119,20 +112,15 @@ export async function processIvrFlow(clientData, params, token, env) {
     let licExpParts = [];
     if (licDate) licExpParts = licDate.year >= 2124 ? [`t-ותוקף הרישיון הוא ללא הגבלה`] : [`t-ותוקף הרישיון שלכם הוא עד`, `dateH-${licDate.formatted}`];
 
-    // תפריט: קבוצה שלא מוגדר לה מנוי חודשי (לפי השרת) - בלי אפשרות 2 (חידוש מנוי חודשי)
-    const subMenuOption = groupHasSubscription ? "t-לחידוש מנוי חודשי הקישו 2." : "";
-    const allowedMainKeys = groupHasSubscription ? "1234*" : "134*";
-    const menuLine = `t-לטעינת פעימות הקישו 1.${subMenuOption}t-לחידוש רישיון שנתי הקישו 3.t-לניהול אמצעי תשלום והוראות קבע הקישו 4`;
-
     let ttsParts = [
       `t-שלום`, `t-${cleanText(`${clientData.firstName}${clientData.lastName}`)}`,
       ...typeParts,
       `t-יתרת הפעימות שלך היא`, `n-${balanceInShekels}`, `t-שקלים`,
       ...subEndParts, ...licExpParts,
-      menuLine
+      `t-לטעינת פעימות הקישו 1.t-לחידוש מנוי חודשי הקישו 2.t-לחידוש רישיון שנתי הקישו 3.t-לניהול אמצעי תשלום והוראות קבע הקישו 4`
     ];
 
-    return `read=${ttsParts.join(".")}=main_menu_${nextIdx},,1,,,NO,,,,${allowedMainKeys},,,,,no`;
+    return `read=${ttsParts.join(".")}=main_menu_${nextIdx},,1,,,NO,,,,1234*,,,,,no`;
   }
 
   const amountCancels = cc_numbers.filter(v => v === '*').length + fail_retries.filter(v => v === '2').length;
@@ -187,9 +175,38 @@ export async function processIvrFlow(clientData, params, token, env) {
     finalAmountAgorot = currentPeimaAmountShekels * 100;
 
   } else if (selectedMenu === '2') {
-    paymentItemType = 1; 
-    
-    if (sub_confirms.includes('*')) return "&"; 
+    paymentItemType = 1;
+
+    if (sub_confirms.includes('*')) return "&";
+
+    // בכניסה הראשונה לחידוש מנוי חודשי - בדיקה מהשרת: אם לקבוצה לא מוגדר מנוי חודשי (useSubscription),
+    // מודיעים שאין אפשרות למנוי חודשי במנוי זה (למשל ערך צבור / פעימות). פרמטר מהשרת בלבד.
+    if (sub_confirms.length === 0) {
+      let groupHasSubscription = true;
+      let groupName = "";
+      try {
+        const grpRes = await fetch(`${BASE_URL}/Group`, {
+          method: 'GET',
+          headers: { "Authorization": `Bearer ${token}`, "clubExternalId": params.club }
+        });
+        if (grpRes.ok) {
+          const grpRaw = await grpRes.json();
+          const grpList = Array.isArray(grpRaw) ? grpRaw : (grpRaw.data || []);
+          const myGroup = grpList.find(g => g.id === clientData.groupId);
+          if (myGroup) {
+            groupHasSubscription = myGroup.useSubscription === true; // ההחלטה - פרמטר מהשרת בלבד
+            groupName = (myGroup.name || "").replace(/^\s*\d+\s*[.\-)]\s*/, '').trim(); // השם - רק להקראה בהודעה
+          }
+        }
+      } catch (e) { /* לא הצלחנו לשלוף - ממשיכים כרגיל */ }
+
+      if (!groupHasSubscription) {
+        const msgParts = [`t-במנוי שלך`];
+        if (groupName) msgParts.push(`t-${cleanText(groupName)}`);
+        msgParts.push(`t-אין אפשרות לחידוש מנוי חודשי`);
+        return `id_list_message=${msgParts.join(".")}`;
+      }
+    }
 
     let subAcceptances = sub_confirms.filter(v => v === '1').length;
     isAmountAccepted = subAcceptances > amountCancels;
