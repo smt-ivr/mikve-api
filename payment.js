@@ -85,9 +85,12 @@ export async function processIvrFlow(clientData, params, token, env) {
     const nextIdx = main_menus.length + 1;
     const balanceInShekels = (clientData.lastBalance || 0) / 100;
 
-    // --- סוג המנוי של הלקוח (שם הקבוצה) + האם זו קבוצת "ערך צבור" (פעימות בלבד, בלי מנוי חודשי) ---
+    // --- סוג המנוי של הלקוח (שם הקבוצה, להקראה בלבד) + האם לקבוצה מוגדר מנוי חודשי ---
+    // החסימה של חידוש מנוי חודשי נקבעת אך ורק לפי פרמטר מהשרת: useSubscription של הקבוצה.
+    // קבוצה שלא מוגדר לה מנוי חודשי (useSubscription=false) - למשל "ערך צבור"/פעימות - לא תקבל אפשרות 2.
+    // ברירת מחדל true: אם לא הצלחנו לקרוא את הקבוצה מהשרת, לא חוסמים (לא פוגעים בלקוח רגיל).
     let groupName = "";
-    let isErechTzavur = false;
+    let groupHasSubscription = true;
     try {
       const grpRes = await fetch(`${BASE_URL}/Group`, {
         method: 'GET',
@@ -98,9 +101,8 @@ export async function processIvrFlow(clientData, params, token, env) {
         const grpList = Array.isArray(grpRaw) ? grpRaw : (grpRaw.data || []);
         const myGroup = grpList.find(g => g.id === clientData.groupId);
         if (myGroup) {
-          groupName = (myGroup.name || "").replace(/^\s*\d+\s*[.\-)]\s*/, '').trim();
-          // ערך צבור = קבוצה שעובדת על פעימות ולא על מנוי חודשי
-          isErechTzavur = myGroup.useSubscription === false || /ערך\s*צבור|פעימ/.test(myGroup.name || "");
+          groupName = (myGroup.name || "").replace(/^\s*\d+\s*[.\-)]\s*/, '').trim(); // רק להקראה
+          groupHasSubscription = myGroup.useSubscription === true; // פרמטר מהשרת בלבד
         }
       }
     } catch (e) { /* אם לא הצלחנו לשלוף את הקבוצות - ממשיכים בלי לחסום */ }
@@ -117,9 +119,9 @@ export async function processIvrFlow(clientData, params, token, env) {
     let licExpParts = [];
     if (licDate) licExpParts = licDate.year >= 2124 ? [`t-ותוקף הרישיון הוא ללא הגבלה`] : [`t-ותוקף הרישיון שלכם הוא עד`, `dateH-${licDate.formatted}`];
 
-    // תפריט: לקבוצת "ערך צבור" אין חידוש מנוי חודשי (אפשרות 2) - מסתירים וחוסמים אותה
-    const subMenuOption = isErechTzavur ? "" : "t-לחידוש מנוי חודשי הקישו 2.";
-    const allowedMainKeys = isErechTzavur ? "134*" : "1234*";
+    // תפריט: קבוצה שלא מוגדר לה מנוי חודשי (לפי השרת) - בלי אפשרות 2 (חידוש מנוי חודשי)
+    const subMenuOption = groupHasSubscription ? "t-לחידוש מנוי חודשי הקישו 2." : "";
+    const allowedMainKeys = groupHasSubscription ? "1234*" : "134*";
     const menuLine = `t-לטעינת פעימות הקישו 1.${subMenuOption}t-לחידוש רישיון שנתי הקישו 3.t-לניהול אמצעי תשלום והוראות קבע הקישו 4`;
 
     let ttsParts = [
