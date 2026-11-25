@@ -276,6 +276,25 @@ export async function processIvrFlow(clientData, params, token, env) {
     return `id_list_message=t-אין סכום לתשלום`;
   }
 
+  // 🧪 ניסוי — כיסוי מלא מהזיכוי (מנוי חודשי בלבד): אם יש test=yes והזיכוי מכסה את כל מחיר המנוי,
+  // לא מבקשים אשראי בכלל. לפי המתכון שאומת: מעדכנים את תאריך המנוי (מה שהשרת החזיר) ומורידים מהזיכוי.
+  if (isTest && paymentItemType === 1 && finalAmountAgorot > 0 && (clientData.lastTempBalance || 0) >= finalAmountAgorot) {
+    const okDate = await setSubscriptionEndDate(actualClientId, null, subDates.endDate, token, params.club);
+    if (!okDate) {
+      return `id_list_message=t-שים לב.t-זהו ניסוי בשלוחה.t-עדכון תאריך המנוי נכשל`;
+    }
+    const okDed = await mkBalanceOp(actualClientId, actualClubId, 2, -finalAmountAgorot, token, params.club);
+    const toD = formatDateIL(subDates.endDate);
+    return `id_list_message=t-שים לב.t-זהו ניסוי בשלוחה.t-המנוי חודש מהזיכוי עד תאריך.dateH-${toD ? toD.formatted : ""}.t-נוכו.n-${finalAmountAgorot / 100}.t-שקלים מהזיכוי${okDed ? "" : ".t-אך ההורדה מהזיכוי נכשלה"}.t-ללא חיוב אשראי`;
+  }
+
+  // 🧪 ניסוי — כיסוי מלא מהזיכוי (פעימות): מורידים מהזיכוי ומוסיפים לפעימות, בלי אשראי בכלל.
+  if (isTest && paymentItemType === 2 && finalAmountAgorot > 0 && (clientData.lastTempBalance || 0) >= finalAmountAgorot) {
+    const dedOk = await mkBalanceOp(actualClientId, actualClubId, 2, -finalAmountAgorot, token, params.club);  // זיכוי יורד
+    const addOk = await mkBalanceOp(actualClientId, actualClubId, 1, finalAmountAgorot, token, params.club);   // פעימות עולות
+    return `id_list_message=t-שים לב.t-זהו ניסוי בשלוחה.t-נטענו.n-${finalAmountAgorot / 100}.t-שקלים פעימות מהזיכוי${(dedOk && addOk) ? "" : ".t-אך פעולה נכשלה"}.t-ללא חיוב אשראי`;
+  }
+
   const ccNumCancels = cc_exps.filter(v => v === '*').length + fail_retries.length;
   let validCcNumbers = cc_numbers.filter(v => v !== '*' && isValidLuhn(v));
   let isCcNumValid = validCcNumbers.length > ccNumCancels;
@@ -317,12 +336,12 @@ export async function processIvrFlow(clientData, params, token, env) {
 
   if (isCcCvvValid) {
     // 🧪 ניסוי יתרה זמנית — פעיל רק כשמימות המשיח נשלח test=yes.
-    // מנוי חודשי: מנכים קודם את הזיכוי (יתרה זמנית), מחייבים באשראי רק את ההפרש,
-    // ומיד אחרי חיוב מוצלח מורידים מהזיכוי בקריאה נפרדת. בלי test=yes — התנהגות רגילה לגמרי.
+    // מנוי/פעימות: מנכים קודם את הזיכוי, מחייבים באשראי רק את ההפרש, ואחרי חיוב מוצלח
+    // מורידים מהזיכוי (ובפעימות — גם מוסיפים לפעימות את החלק מהזיכוי). בלי test=yes — רגיל לגמרי.
     const tempBalAgorot = Math.max(0, clientData.lastTempBalance || 0);
     let tempUsedAgorot = 0;
     let chargeAgorot = finalAmountAgorot;
-    if (isTest && paymentItemType === 1 && tempBalAgorot > 0 && finalAmountAgorot > 0) {
+    if (isTest && (paymentItemType === 1 || paymentItemType === 2) && tempBalAgorot > 0 && finalAmountAgorot > 0) {
       tempUsedAgorot = Math.min(tempBalAgorot, finalAmountAgorot);
       chargeAgorot = finalAmountAgorot - tempUsedAgorot;
     }
@@ -360,15 +379,15 @@ export async function processIvrFlow(clientData, params, token, env) {
     });
 
     if (payRes.isSuccess) {
-      // 🧪 ניסוי: אחרי חיוב מוצלח — מורידים מהזיכוי את מה שנוצל (קריאה נפרדת)
+      // 🧪 ניסוי: אחרי חיוב מוצלח — מורידים מהזיכוי את מה שנוצל (ובפעימות גם מוסיפים לפעימות)
       let tempNote = "";
       if (isTest && tempUsedAgorot > 0) {
-        try {
-          await deductTempBalance(actualClientId, actualClubId, tempUsedAgorot, token, params.club);
-          tempNote = `.t-מתוכם.n-${tempUsedAgorot / 100}.t-שקלים נוכו מהזיכוי.t-ו.n-${chargeAgorot / 100}.t-שקלים באשראי`;
-        } catch (e) {
-          tempNote = `.t-אך ניכוי הזיכוי נכשל`;
+        const dedOk = await mkBalanceOp(actualClientId, actualClubId, 2, -tempUsedAgorot, token, params.club);  // זיכוי יורד
+        let addOk = true;
+        if (paymentItemType === 2) {  // פעימות: מוסיפים לפעימות את החלק ששולם מהזיכוי (במנוי אין צורך — החיוב כבר מפעיל אותו)
+          addOk = await mkBalanceOp(actualClientId, actualClubId, 1, tempUsedAgorot, token, params.club);
         }
+        tempNote = `.t-מתוכם.n-${tempUsedAgorot / 100}.t-שקלים מהזיכוי.t-ו.n-${chargeAgorot / 100}.t-שקלים באשראי${(dedOk && addOk) ? "" : ".t-אך פעולת הזיכוי נכשלה"}`;
       }
       const testPrefix = isTest ? `t-שים לב.t-זהו ניסוי בשלוחה.` : "";
       return `id_list_message=${testPrefix}t-בוצע בהצלחה תשלום.t-עבור.t-${actionName}.t-על סך.n-${finalAmountAgorot / 100}.t-שקלים${tempNote}`;
@@ -391,12 +410,23 @@ export async function processIvrFlow(clientData, params, token, env) {
   }
 }
 
-// 🧪 ניכוי מהיתרה הזמנית (זיכוי) — קריאת AdminPurchase נפרדת, כמו ריקון זיכוי במסך המקווה.
-// transactionType:2 + itemType:2 + payments:[] + moneyValue שלילי. (agorot חיובי — יורד מהזיכוי.)
-async function deductTempBalance(clientId, clubId, agorot, token, club) {
+// 🧪 עדכון תאריך סיום המנוי — PATCH /Client/{id}/SubscriptionDates (כמו שאומת ב-capture).
+// endDate = מה שהשרת החזיר ב-GetRenewSubscriptionStartAndEndDatesAndPrice (לא מנחשים — השרת יודע).
+async function setSubscriptionEndDate(clientId, startDate, endDate, token, club) {
+  const r = await fetch(`${BASE_URL}/Client/${clientId}/SubscriptionDates`, {
+    method: 'PATCH',
+    headers: { "Authorization": `Bearer ${token}`, "clubExternalId": club, "Content-Type": "application/json" },
+    body: JSON.stringify({ subscriptionStartDate: startDate ?? null, subscriptionEndDate: endDate })
+  });
+  return r.ok;
+}
+
+// 🧪 פעולת יתרה במקווה בלי אשראי (payments:[]) — moneyValue חתום באגורות (+ מוסיף, − מוריד).
+// transactionType: 2 = זיכוי (יתרה זמנית) · 1 = פעימות (balance). itemType תמיד 2. (מאומת ב-captures.)
+async function mkBalanceOp(clientId, clubId, transactionType, moneyValueAgorot, token, club) {
   const payload = {
     payments: [],
-    purchaseItems: [{ transactionType: 2, itemType: 2, clientId, clubId, moneyValue: -Math.abs(agorot) }],
+    purchaseItems: [{ transactionType, itemType: 2, clientId, clubId, moneyValue: moneyValueAgorot }],
     IsAdminUser: true, clientId, clubId
   };
   const r = await fetch(`${BASE_URL}/Client/AdminPurchase`, {
@@ -405,8 +435,8 @@ async function deductTempBalance(clientId, clubId, agorot, token, club) {
     body: JSON.stringify(payload)
   });
   let res = {};
-  try { res = await r.json(); } catch (e) { res = { isSuccess: r.ok }; }
-  return res;
+  try { res = await r.json(); } catch (e) {}
+  return r.ok && (res.isSuccess !== false);
 }
 
 async function executePayment(paymentPayload, amountAgorot, params, clientData, token, env, meta = {}) {
