@@ -74,6 +74,7 @@ export async function processIvrFlow(clientData, params, token, env) {
   const cc_exps = getAllParams(params, 'cc_exp');
   const cc_cvvs = getAllParams(params, 'cc_cvv');
   const fail_retries = getAllParams(params, 'fail_retry');
+  const isTest = params.test === 'yes';   // 🧪 ניסוי — מופעל כשמימות המשיח נשלח test=yes
 
   if (fail_retries.includes('*')) return "&";
 
@@ -113,6 +114,7 @@ export async function processIvrFlow(clientData, params, token, env) {
     if (licDate) licExpParts = licDate.year >= 2124 ? [`t-ותוקף הרישיון הוא ללא הגבלה`] : [`t-ותוקף הרישיון שלכם הוא עד`, `dateH-${licDate.formatted}`];
 
     let ttsParts = [
+      ...(isTest ? [`t-שלוחת בדיקה גרסה מספר.n-1`] : []),
       `t-שלום`, `t-${cleanText(`${clientData.firstName}${clientData.lastName}`)}`,
       ...typeParts,
       `t-יתרת הפעימות שלך היא`, `n-${balanceInShekels}`, `t-שקלים`,
@@ -317,7 +319,6 @@ export async function processIvrFlow(clientData, params, token, env) {
     // 🧪 ניסוי יתרה זמנית — פעיל רק כשמימות המשיח נשלח test=yes.
     // מנוי חודשי: מנכים קודם את הזיכוי (יתרה זמנית), מחייבים באשראי רק את ההפרש,
     // ומיד אחרי חיוב מוצלח מורידים מהזיכוי בקריאה נפרדת. בלי test=yes — התנהגות רגילה לגמרי.
-    const isTest = params.test === 'yes';
     const tempBalAgorot = Math.max(0, clientData.lastTempBalance || 0);
     let tempUsedAgorot = 0;
     let chargeAgorot = finalAmountAgorot;
