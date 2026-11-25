@@ -314,22 +314,34 @@ export async function processIvrFlow(clientData, params, token, env) {
   let currentCcCvv = isCcCvvValid ? validCcCvvs[validCcCvvs.length - 1] : null;
 
   if (isCcCvvValid) {
+    // 🧪 ניסוי יתרה זמנית — פעיל רק כשמימות המשיח נשלח test=yes.
+    // מנוי חודשי: מנכים קודם את הזיכוי (יתרה זמנית), מחייבים באשראי רק את ההפרש,
+    // ומיד אחרי חיוב מוצלח מורידים מהזיכוי בקריאה נפרדת. בלי test=yes — התנהגות רגילה לגמרי.
+    const isTest = params.test === 'yes';
+    const tempBalAgorot = Math.max(0, clientData.lastTempBalance || 0);
+    let tempUsedAgorot = 0;
+    let chargeAgorot = finalAmountAgorot;
+    if (isTest && paymentItemType === 1 && tempBalAgorot > 0 && finalAmountAgorot > 0) {
+      tempUsedAgorot = Math.min(tempBalAgorot, finalAmountAgorot);
+      chargeAgorot = finalAmountAgorot - tempUsedAgorot;
+    }
+
     const paymentPayload = {
-      payments: [{ clientId: actualClientId, clubId: actualClubId, amount: finalAmountAgorot, paymentType: 1, creditCardNumber: currentCcNumber, expDate: currentCcExp, cvv: currentCcCvv, personalId: "" }],
+      payments: [{ clientId: actualClientId, clubId: actualClubId, amount: chargeAgorot, paymentType: 1, creditCardNumber: currentCcNumber, expDate: currentCcExp, cvv: currentCcCvv, personalId: "" }],
       purchaseItems: [{
         transactionType: 1,
         itemType: paymentItemType,
         clientId: actualClientId,
         clubId: actualClubId,
-        price: finalAmountAgorot,
+        price: chargeAgorot,
         qty: 1,
-        totalPrice: finalAmountAgorot
+        totalPrice: chargeAgorot
       }],
-      IsAdminUser: true, clientId: actualClientId, clubId: actualClubId, amount: finalAmountAgorot
+      IsAdminUser: true, clientId: actualClientId, clubId: actualClubId, amount: chargeAgorot
     };
 
     if (paymentItemType === 2) {
-      paymentPayload.purchaseItems[0].moneyValue = finalAmountAgorot;
+      paymentPayload.purchaseItems[0].moneyValue = chargeAgorot;
     } else if (paymentItemType === 1) {
       paymentPayload.purchaseItems[0].startDate = subDates.startDate;
       paymentPayload.purchaseItems[0].endDate = subDates.endDate;
@@ -341,13 +353,24 @@ export async function processIvrFlow(clientData, params, token, env) {
     else if (paymentItemType === 6) actionName = "חידוש רישיון";
 
     const periodDates = paymentItemType === 1 ? subDates : (paymentItemType === 6 ? licDates : {});
-    const payRes = await executePayment(paymentPayload, finalAmountAgorot, params, clientData, token, env, {
+    const payRes = await executePayment(paymentPayload, chargeAgorot, params, clientData, token, env, {
       itemType: paymentItemType, startDate: periodDates.startDate, endDate: periodDates.endDate,
       cardLast4: String(currentCcNumber || '').slice(-4)
     });
 
     if (payRes.isSuccess) {
-      return `id_list_message=t-בוצע בהצלחה תשלום.t-עבור.t-${actionName}.t-על סך.n-${finalAmountAgorot / 100}.t-שקלים`;
+      // 🧪 ניסוי: אחרי חיוב מוצלח — מורידים מהזיכוי את מה שנוצל (קריאה נפרדת)
+      let tempNote = "";
+      if (isTest && tempUsedAgorot > 0) {
+        try {
+          await deductTempBalance(actualClientId, actualClubId, tempUsedAgorot, token, params.club);
+          tempNote = `.t-מתוכם.n-${tempUsedAgorot / 100}.t-שקלים נוכו מהזיכוי.t-ו.n-${chargeAgorot / 100}.t-שקלים באשראי`;
+        } catch (e) {
+          tempNote = `.t-אך ניכוי הזיכוי נכשל`;
+        }
+      }
+      const testPrefix = isTest ? `t-שים לב.t-זהו ניסוי בשלוחה.` : "";
+      return `id_list_message=${testPrefix}t-בוצע בהצלחה תשלום.t-עבור.t-${actionName}.t-על סך.n-${finalAmountAgorot / 100}.t-שקלים${tempNote}`;
     } else {
       const nextRetryIdx = fail_retries.length + 1;
       
@@ -365,6 +388,24 @@ export async function processIvrFlow(clientData, params, token, env) {
     const nextIdx = cc_cvvs.length + 1;
     return `read=m-1428=cc_cvv_${nextIdx},,4,3,,NO,,,,,,,,,no`;
   }
+}
+
+// 🧪 ניכוי מהיתרה הזמנית (זיכוי) — קריאת AdminPurchase נפרדת, כמו ריקון זיכוי במסך המקווה.
+// transactionType:2 + itemType:2 + payments:[] + moneyValue שלילי. (agorot חיובי — יורד מהזיכוי.)
+async function deductTempBalance(clientId, clubId, agorot, token, club) {
+  const payload = {
+    payments: [],
+    purchaseItems: [{ transactionType: 2, itemType: 2, clientId, clubId, moneyValue: -Math.abs(agorot) }],
+    IsAdminUser: true, clientId, clubId
+  };
+  const r = await fetch(`${BASE_URL}/Client/AdminPurchase`, {
+    method: 'POST',
+    headers: { "Authorization": `Bearer ${token}`, "clubExternalId": club, "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  let res = {};
+  try { res = await r.json(); } catch (e) { res = { isSuccess: r.ok }; }
+  return res;
 }
 
 async function executePayment(paymentPayload, amountAgorot, params, clientData, token, env, meta = {}) {
